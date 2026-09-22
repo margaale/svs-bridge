@@ -306,6 +306,9 @@ static esp_err_t api_state_get(httpd_req_t *req)
     JsonDocument doc;
     add_svs_info(doc["svs"].to<JsonObject>());
     JsonObject bridge = doc["bridge"].to<JsonObject>();
+    // The running firmware version, so the integration always shows the current
+    // one (not just what it read at setup) and can detect a newer release.
+    bridge["sw_version"] = esp_app_get_description()->version;
     bridge["rssi"] = wifi_manager::sta_rssi();
     bridge["uptime_s"] = esp_timer_get_time() / 1000000;
     return send_json(req, doc);
