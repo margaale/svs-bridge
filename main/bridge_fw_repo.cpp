@@ -52,7 +52,7 @@ static esp_err_t http_get(const char *url, std::string &body, std::string *error
         esp_http_client_close(client);
         esp_http_client_cleanup(client);
         if (status == 404) {
-            *error = "No releases found (is the firmware repository public?)";
+            *error = "No releases found on GitHub";
         } else {
             char msg[64];
             snprintf(msg, sizeof(msg), "GitHub answered HTTP %d", status);

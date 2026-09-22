@@ -195,7 +195,7 @@
         <dt>Firmware</dt><dd id="svs-fw">…</dd>
         <dt>Inputs</dt><dd id="svs-inputs">…</dd>
       </dl>
-      <label class="toggle">
+      <label class="toggle" id="svs-send-label" hidden>
         <input type="checkbox" id="svs-send-toggle">
         <span>Send commands to the SVS</span>
       </label>
@@ -619,17 +619,20 @@ function renderSvs(s) {
     : s.total_inputs != null ? `${s.total_inputs} (current: ${current})` : unknown;
   $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
 
-  // Send vs. listen-only mode
+  // Send vs. listen-only mode. The whole mode UI only makes sense with an SVS
+  // attached, so it is hidden until one is connected.
   const send = s.send_enabled;
   $('svs-send-toggle').checked = send;
+  $('svs-send-label').hidden = !s.connected;
+  $('svs-mode-hint').hidden = !s.connected;
   $('svs-mode-hint').textContent = send
     ? "The bridge can send commands and update the SVS firmware. Keep the RetroTINK's HD-15 "
       + "disconnected while sending — the SVS shares that line."
     : "The bridge only listens to the SVS (its active input). Turn this on to send commands or "
       + "update firmware; disconnect the RetroTINK's HD-15 first.";
-  $('svs-restart-btn').hidden = !send;
-  $('svs-send-form').hidden = !send;
-  $('svs-fw-section').hidden = !send;
+  $('svs-restart-btn').hidden = !send || !s.connected;
+  $('svs-send-form').hidden = !send || !s.connected;
+  $('svs-fw-section').hidden = !send || !s.connected;
 
   const u = s.update;
   const d = u.device;

@@ -18,7 +18,6 @@
 #include "freertos/stream_buffer.h"
 #include "esp_log.h"
 #include "esp_timer.h"
-#include "nvs.h"
 
 #include "usb/usb_host.h"
 #include "usb/usb_helpers.h"
@@ -68,8 +67,6 @@ static volatile bool s_send_allowed = false;  // listen-only until enabled
 // If a just-connected SVS has never reported anything, wait this long for a
 // banner (it may be booting too) before restarting it to get one
 static const int FIRST_BANNER_WAIT_MS = 4000;
-
-static const char *NVS_NAMESPACE = "svs";
 
 static int64_t now_ms() { return esp_timer_get_time() / 1000; }
 
@@ -392,14 +389,11 @@ void start()
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
 
-    nvs_handle_t h;
-    uint8_t send = 0;
-    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) == ESP_OK) {
-        nvs_get_u8(h, "send", &send);
-        nvs_close(h);
-    }
-    s_send_allowed = send != 0;
-    ESP_LOGI(TAG, "SVS mode: %s", s_send_allowed ? "send allowed" : "listen only");
+    // Always start in listen-only. Send mode is not persisted: it must be
+    // re-enabled after each boot, so the bridge never comes up able to reset or
+    // flash the SVS on its own (safer with the RetroTINK's HD-15 connected).
+    s_send_allowed = false;
+    ESP_LOGI(TAG, "SVS mode: listen only (default)");
 
     usb_host_config_t host_config = {};
     host_config.skip_phy_setup = false;
@@ -440,13 +434,8 @@ bool send_allowed() { return s_send_allowed; }
 
 void set_send_allowed(bool allowed)
 {
+    // RAM only: the mode resets to listen-only on the next boot (see start()).
     s_send_allowed = allowed;
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_u8(h, "send", allowed ? 1 : 0);
-        nvs_commit(h);
-        nvs_close(h);
-    }
     ESP_LOGI(TAG, "SVS mode: %s", allowed ? "send allowed" : "listen only");
 }
 
