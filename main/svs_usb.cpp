@@ -205,43 +205,9 @@ static void print_line(std::string &line)
     line.clear();
 }
 
-// Last known SVS info, so a restarting bridge does not need to restart the SVS
-static void load_cached_info()
-{
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READONLY, &h) != ESP_OK) {
-        return;
-    }
-    char fw[32] = {};
-    size_t len = sizeof(fw);
-    int32_t total = -1, input = -1;
-    if (nvs_get_str(h, "fw", fw, &len) == ESP_OK) {
-        s_info.firmware = fw;
-    }
-    if (nvs_get_i32(h, "total", &total) == ESP_OK) {
-        s_info.total_inputs = total;
-    }
-    if (nvs_get_i32(h, "input", &input) == ESP_OK) {
-        s_info.current_input = input;
-    }
-    nvs_close(h);
-    if (!s_info.firmware.empty()) {
-        ESP_LOGI(TAG, "Last known SVS: %s, %d inputs", fw, (int)total);
-    }
-}
-
-static void save_info(const Info &info)
-{
-    nvs_handle_t h;
-    if (nvs_open(NVS_NAMESPACE, NVS_READWRITE, &h) != ESP_OK) {
-        return;
-    }
-    nvs_set_str(h, "fw", info.firmware.c_str());
-    nvs_set_i32(h, "total", info.total_inputs);
-    nvs_set_i32(h, "input", info.current_input);
-    nvs_commit(h);
-    nvs_close(h);
-}
+// SVS info is only ever what a currently connected SVS has reported: it is not
+// cached in NVS and is cleared on disconnect (see device_task). If the SVS is
+// unplugged we report nothing rather than stale values from a past session.
 
 // Picks the banner and input change lines out of what the SVS sends
 static void parse_line(const std::string &line)
@@ -250,33 +216,25 @@ static void parse_line(const std::string &line)
     if (p.kind == LineKind::None) {
         return;
     }
-    bool changed = false;
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
     switch (p.kind) {
     case LineKind::Firmware:
-        changed = s_info.firmware != line || !s_info.live;
         s_info.firmware = line;
         s_info.live = true;
         s_info.boots_seen++;
         break;
     case LineKind::InputChange:
-        changed = s_info.current_input != p.value;
         s_info.current_input = p.value;
         s_info.inputs_live = true;
         break;
     case LineKind::TotalInputs:
-        changed = s_info.total_inputs != p.value;
         s_info.total_inputs = p.value;
         s_info.inputs_live = true;
         break;
     case LineKind::None:
         break;  // handled above
     }
-    Info copy = s_info;
     xSemaphoreGive(s_dev_mutex);
-    if (changed) {
-        save_info(copy);
-    }
 }
 
 // Prints data received from the SVS and parses its banner. In text mode it
@@ -406,8 +364,16 @@ static void device_task(void *arg)
 
         xSemaphoreTake(s_disconnected, portMAX_DELAY);
 
+        // The SVS is gone: drop everything we knew about it (keep only the
+        // lifetime connection count) so we never report stale values.
         xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
         s_dev = nullptr;
+        s_info.firmware.clear();
+        s_info.current_input = -1;
+        s_info.total_inputs = -1;
+        s_info.live = false;
+        s_info.inputs_live = false;
+        s_info.boots_seen = 0;
         xSemaphoreGive(s_dev_mutex);
         delete dev;
     }
@@ -425,7 +391,6 @@ void start()
     s_rx_stream = xStreamBufferCreate(4096, 1);
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
-    load_cached_info();
 
     nvs_handle_t h;
     uint8_t send = 0;
