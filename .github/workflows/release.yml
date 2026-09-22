@@ -1,10 +1,10 @@
 name: Release
 
-# develop -> alpha pre-release, master -> stable release. The version is
-# computed by GitVersion (see GitVersion.yml), so no manual version bump.
+# Releases are cut from master only. GitVersion computes a clean x.y.z (see
+# GitVersion.yml), so there is no manual version bump.
 on:
   push:
-    branches: [master, develop]
+    branches: [master]
 
 permissions:
   contents: write
@@ -13,7 +13,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # GitVersion needs the full history
 
@@ -25,18 +25,8 @@ jobs:
         id: gitversion
         uses: gittools/actions/gitversion/execute@v3
 
-      # Clean x.y.z on master; x.y.z-alpha.N on develop.
-      - name: Pick version
-        id: ver
-        run: |
-          if [ "${{ github.ref_name }}" = "develop" ]; then
-            echo "version=${{ steps.gitversion.outputs.semVer }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "version=${{ steps.gitversion.outputs.majorMinorPatch }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Set firmware version
-        run: echo "${{ steps.ver.outputs.version }}" > version.txt
+        run: echo "${{ steps.gitversion.outputs.majorMinorPatch }}" > version.txt
 
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
@@ -49,9 +39,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.ver.outputs.version }}
-          name: v${{ steps.ver.outputs.version }}
-          prerelease: ${{ github.ref_name == 'develop' }}
+          tag_name: v${{ steps.gitversion.outputs.majorMinorPatch }}
+          name: v${{ steps.gitversion.outputs.majorMinorPatch }}
           generate_release_notes: true
           files: |
             build/svs_bridge.bin
