@@ -4,9 +4,12 @@
 #include <string.h>
 #include <string>
 #include <memory>
+#include <functional>
 
 #include "esp_http_server.h"
 #include "esp_https_server.h"
+#include "esp_http_client.h"
+#include "esp_crt_bundle.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
@@ -16,6 +19,7 @@
 #include "ArduinoJson.h"
 
 #include "auth.h"
+#include "bridge_fw_repo.h"
 #include "factory_reset.h"
 #include "svs_flasher.h"
 #include "svs_fw_repo.h"
@@ -353,20 +357,23 @@ static esp_err_t wifi_post(httpd_req_t *req)
     return send_ok(req);
 }
 
-// Receives a firmware image and writes it to the inactive OTA slot. The image
-// is checked to be an svs_bridge build for this chip before anything is
-// written; esp_ota_end() then verifies the full image checksum.
-static esp_err_t ota_post(httpd_req_t *req)
+// Writes a firmware image into the inactive OTA slot. `read(buf, want)` fills up
+// to `want` bytes and returns the count, 0 at end of stream, or <0 on error;
+// `total` is the whole image size. The image is checked to be an svs_bridge
+// build for this chip before any flash is erased; esp_ota_end() then verifies
+// the full checksum. On success the boot partition is switched (caller reboots).
+// Returns ESP_OK, or sets *err_msg and returns a failure code.
+static esp_err_t ota_apply(size_t total, const std::function<int(uint8_t *, size_t)> &read,
+                           std::string &err_msg)
 {
-    if (svs_flasher::busy()) {
-        return send_busy(req);
-    }
     const esp_partition_t *target = esp_ota_get_next_update_partition(NULL);
     if (target == nullptr) {
-        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, "No OTA partition");
+        err_msg = "No OTA partition";
+        return ESP_FAIL;
     }
-    if (req->content_len == 0 || req->content_len > target->size) {
-        return send_error(req, HTTPD_400_BAD_REQUEST, "Missing or too large image");
+    if (total == 0 || total > target->size) {
+        err_msg = "Missing or too large image";
+        return ESP_ERR_INVALID_SIZE;
     }
 
     const size_t header_len =
@@ -374,25 +381,25 @@ static esp_err_t ota_post(httpd_req_t *req)
     std::unique_ptr<uint8_t[]> buf(new uint8_t[OTA_CHUNK]);
     esp_ota_handle_t handle = 0;
     bool started = false;
-    size_t remaining = req->content_len;
+    size_t remaining = total;
     size_t filled = 0;  // bytes in buf not yet written
 
-    ESP_LOGI(TAG, "OTA: receiving %u bytes into %s", (unsigned)req->content_len, target->label);
+    ESP_LOGI(TAG, "OTA: writing %u bytes into %s", (unsigned)total, target->label);
 
     while (remaining > 0) {
         size_t want = OTA_CHUNK - filled;
         if (want > remaining) {
             want = remaining;
         }
-        int r = httpd_req_recv(req, (char *)buf.get() + filled, want);
-        if (r == HTTPD_SOCK_ERR_TIMEOUT) {
-            continue;
+        int r = read(buf.get() + filled, want);
+        if (r == 0) {
+            if (started) esp_ota_abort(handle);
+            err_msg = "Transfer ended early";
+            return ESP_FAIL;
         }
-        if (r <= 0) {
-            ESP_LOGE(TAG, "OTA: connection lost");
-            if (started) {
-                esp_ota_abort(handle);
-            }
+        if (r < 0) {
+            if (started) esp_ota_abort(handle);
+            err_msg = "Connection lost";
             return ESP_FAIL;
         }
         filled += r;
@@ -404,36 +411,42 @@ static esp_err_t ota_post(httpd_req_t *req)
                 continue;
             }
             if (filled < header_len) {
-                return send_error(req, HTTPD_400_BAD_REQUEST, "Image too small");
+                err_msg = "Image too small";
+                return ESP_FAIL;
             }
             const auto *img = (const esp_image_header_t *)buf.get();
             const auto *desc = (const esp_app_desc_t *)(buf.get() + sizeof(esp_image_header_t) +
                                                         sizeof(esp_image_segment_header_t));
             if (img->magic != ESP_IMAGE_HEADER_MAGIC || desc->magic_word != ESP_APP_DESC_MAGIC_WORD) {
-                return send_error(req, HTTPD_400_BAD_REQUEST, "Not an ESP-IDF app image");
+                err_msg = "Not an ESP-IDF app image";
+                return ESP_FAIL;
             }
             if (img->chip_id != CONFIG_IDF_FIRMWARE_CHIP_ID) {
-                return send_error(req, HTTPD_400_BAD_REQUEST, "Image is for a different chip");
+                err_msg = "Image is for a different chip";
+                return ESP_FAIL;
             }
             const esp_app_desc_t *running = esp_app_get_description();
             if (strncmp(desc->project_name, running->project_name, sizeof(desc->project_name)) != 0) {
-                return send_error(req, HTTPD_400_BAD_REQUEST, "Image is not an svs_bridge firmware");
+                err_msg = "Image is not an svs_bridge firmware";
+                return ESP_FAIL;
             }
             ESP_LOGI(TAG, "OTA: new version %.32s (running %s)", desc->version, running->version);
 
             esp_err_t err = esp_ota_begin(target, OTA_WITH_SEQUENTIAL_WRITES, &handle);
             if (err != ESP_OK) {
-                return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+                err_msg = esp_err_to_name(err);
+                return err;
             }
             started = true;
         }
 
-        // Write when the buffer is full or the upload is complete
+        // Write when the buffer is full or the transfer is complete
         if (filled == OTA_CHUNK || remaining == 0) {
             esp_err_t err = esp_ota_write(handle, buf.get(), filled);
             if (err != ESP_OK) {
                 esp_ota_abort(handle);
-                return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+                err_msg = esp_err_to_name(err);
+                return err;
             }
             filled = 0;
         }
@@ -441,15 +454,157 @@ static esp_err_t ota_post(httpd_req_t *req)
 
     esp_err_t err = esp_ota_end(handle);
     if (err != ESP_OK) {
-        const char *msg = err == ESP_ERR_OTA_VALIDATE_FAILED ? "Image is corrupted" : esp_err_to_name(err);
-        return send_error(req, HTTPD_400_BAD_REQUEST, msg);
+        err_msg = err == ESP_ERR_OTA_VALIDATE_FAILED ? "Image is corrupted" : esp_err_to_name(err);
+        return err;
     }
     err = esp_ota_set_boot_partition(target);
     if (err != ESP_OK) {
-        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+        err_msg = esp_err_to_name(err);
+        return err;
+    }
+    ESP_LOGI(TAG, "OTA: done, boot partition set to %s", target->label);
+    return ESP_OK;
+}
+
+// Receives an uploaded firmware image and applies it to the inactive OTA slot.
+static esp_err_t ota_post(httpd_req_t *req)
+{
+    if (svs_flasher::busy()) {
+        return send_busy(req);
+    }
+    if (req->content_len == 0) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, "Missing image");
+    }
+    auto read = [&](uint8_t *b, size_t want) -> int {
+        int r;
+        do {
+            r = httpd_req_recv(req, (char *)b, want);
+        } while (r == HTTPD_SOCK_ERR_TIMEOUT);
+        return r;  // <= 0 on error/close
+    };
+    std::string err;
+    if (ota_apply(req->content_len, read, err) != ESP_OK) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, err.c_str());
+    }
+    send_ok(req);
+    schedule_reboot();
+    return ESP_OK;
+}
+
+// Lists the bridge's own GitHub releases (with the running version) so the web
+// UI can offer a one-click update.
+static esp_err_t releases_get(httpd_req_t *req)
+{
+    std::vector<bridge_fw_repo::Release> releases;
+    std::string err;
+    if (bridge_fw_repo::list(releases, &err) != ESP_OK) {
+        JsonDocument doc;
+        doc["error"] = err;
+        httpd_resp_set_status(req, "502 Bad Gateway");
+        return send_json(req, doc);
+    }
+    JsonDocument doc;
+    doc["running"] = esp_app_get_description()->version;
+    JsonArray arr = doc["releases"].to<JsonArray>();
+    for (const auto &r : releases) {
+        JsonObject o = arr.add<JsonObject>();
+        o["tag"] = r.tag;
+        o["name"] = r.name;
+        o["notes_url"] = r.notes_url;
+        o["prerelease"] = r.prerelease;
+        o["size"] = r.size;
+    }
+    return send_json(req, doc);
+}
+
+// Opens `url`, following up to 5 redirects (GitHub asset URLs redirect to a
+// CDN). On success returns the ready-to-read client via *out; caller closes it.
+static esp_err_t open_following_redirects(const std::string &url, esp_http_client_handle_t *out,
+                                          std::string &err)
+{
+    std::string cur = url;
+    for (int hop = 0; hop < 5; hop++) {
+        esp_http_client_config_t config = {};
+        config.url = cur.c_str();
+        config.crt_bundle_attach = esp_crt_bundle_attach;
+        config.timeout_ms = 20000;
+        config.buffer_size = 4096;
+        config.user_agent = "svs-bridge";
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (client == nullptr) {
+            err = "Out of memory";
+            return ESP_ERR_NO_MEM;
+        }
+        if (esp_http_client_open(client, 0) != ESP_OK) {
+            esp_http_client_cleanup(client);
+            err = "Could not reach GitHub";
+            return ESP_FAIL;
+        }
+        esp_http_client_fetch_headers(client);
+        int status = esp_http_client_get_status_code(client);
+        if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
+            char *loc = nullptr;
+            if (esp_http_client_get_header(client, "Location", &loc) == ESP_OK && loc != nullptr) {
+                cur = loc;  // copied before cleanup frees the header
+                esp_http_client_close(client);
+                esp_http_client_cleanup(client);
+                continue;
+            }
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            err = "Redirect without a location";
+            return ESP_FAIL;
+        }
+        if (status != 200) {
+            esp_http_client_close(client);
+            esp_http_client_cleanup(client);
+            char msg[48];
+            snprintf(msg, sizeof(msg), "Download failed (HTTP %d)", status);
+            err = msg;
+            return ESP_FAIL;
+        }
+        *out = client;
+        return ESP_OK;
+    }
+    err = "Too many redirects";
+    return ESP_FAIL;
+}
+
+// Downloads a chosen GitHub release's firmware and applies it over the air.
+static esp_err_t ota_github_post(httpd_req_t *req)
+{
+    if (svs_flasher::busy()) {
+        return send_busy(req);
+    }
+    std::string body;
+    if (!read_body(req, MAX_JSON_BODY, body)) {
+        return ESP_FAIL;
+    }
+    JsonDocument doc;
+    if (deserializeJson(doc, body) != DeserializationError::Ok) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+    }
+    std::string tag = doc["tag"] | "";
+    std::string url;
+    size_t size = 0;
+    if (tag.empty() || !bridge_fw_repo::resolve(tag, url, size)) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, "Unknown release; refresh the list first");
     }
 
-    ESP_LOGI(TAG, "OTA: done, rebooting into %s", target->label);
+    esp_http_client_handle_t client = nullptr;
+    std::string err;
+    if (open_following_redirects(url, &client, err) != ESP_OK) {
+        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, err.c_str());
+    }
+    auto read = [&](uint8_t *b, size_t want) -> int {
+        return esp_http_client_read(client, (char *)b, want);
+    };
+    esp_err_t rc = ota_apply(size, read, err);
+    esp_http_client_close(client);
+    esp_http_client_cleanup(client);
+    if (rc != ESP_OK) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, err.c_str());
+    }
     send_ok(req);
     schedule_reboot();
     return ESP_OK;
@@ -937,6 +1092,8 @@ static const RouteEntry HTTPS_ROUTES[] = {
     {"/device/cert", HTTP_GET, {cert_get, Access::Admin, false}},
     {"/device/wifi", HTTP_POST, {wifi_post, Access::Admin, false}},
     {"/device/ota", HTTP_POST, {ota_post, Access::Admin, false}},
+    {"/device/releases", HTTP_GET, {releases_get, Access::Admin, false}},
+    {"/device/ota/github", HTTP_POST, {ota_github_post, Access::Admin, false}},
     {"/device/reboot", HTTP_POST, {reboot_post, Access::Admin, false}},
     {"/device/factory-reset", HTTP_POST, {factory_reset_post, Access::Admin, false}},
     {"/device/svs", HTTP_GET, {svs_get, Access::Admin, false}},

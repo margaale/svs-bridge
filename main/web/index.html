@@ -120,6 +120,21 @@
   progress { width: 100%; height: 8px; margin-top: 12px; }
   .msg { margin-top: 10px; min-height: 1.2em; }
   a { color: var(--accent); }
+  /* Primary navigation: one area at a time instead of one long scroll */
+  .tabs { display: flex; gap: 2px; margin: 0 0 16px; overflow-x: auto; border-bottom: 1px solid var(--border); }
+  .tabs button {
+    margin: 0; padding: 9px 14px; background: transparent; color: var(--muted); border: 0;
+    border-bottom: 2px solid transparent; border-radius: 0; font-weight: 500; white-space: nowrap;
+  }
+  .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tabs button:hover { color: var(--text); }
+  /* Secondary tabs, e.g. firmware source (GitHub vs a manual file) */
+  .subtabs { display: flex; gap: 6px; margin: 4px 0 12px; }
+  .subtabs button {
+    margin: 0; padding: 6px 12px; font-size: 13px; background: var(--bg); color: var(--muted);
+    border: 1px solid var(--border); border-radius: 999px;
+  }
+  .subtabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -154,6 +169,14 @@
   </section>
 
   <div id="app" hidden>
+    <nav class="tabs" id="tabs">
+      <button data-tab="svs" class="active">SVS</button>
+      <button data-tab="bridge">Bridge</button>
+      <button data-tab="firmware">Firmware</button>
+      <button data-tab="settings">Settings</button>
+    </nav>
+
+    <div class="tab" data-tab="svs">
     <section>
       <h2>SVS</h2>
       <dl>
@@ -225,7 +248,9 @@
       <progress id="svs-progress" value="0" max="100" hidden></progress>
       <div class="msg" id="svs-msg"></div>
     </section>
+    </div><!-- /svs tab -->
 
+    <div class="tab" data-tab="bridge" hidden>
     <section>
       <h2>Bridge</h2>
       <dl>
@@ -265,31 +290,52 @@
       </form>
       <div class="msg" id="wifi-msg"></div>
     </section>
+    </div><!-- /bridge tab -->
 
+    <div class="tab" data-tab="firmware" hidden>
     <section>
       <h2>Bridge firmware update</h2>
-      <label for="fw-file">Firmware file (<span class="mono">build/svs_bridge.bin</span>)</label>
-      <div class="file">
-        <input type="file" id="fw-file" class="file-input" accept=".bin">
-        <label for="fw-file" class="btn secondary">Choose file</label>
-        <span class="file-name">No file chosen</span>
+      <dl><dt>Running</dt><dd id="fw-current">…</dd></dl>
+      <nav class="subtabs" id="fw-tabs">
+        <button type="button" data-fwtab="github" class="active">From GitHub</button>
+        <button type="button" data-fwtab="manual">Manual file</button>
+      </nav>
+
+      <div class="fwtab" data-fwtab="github">
+        <label for="fw-rel">Available releases</label>
+        <select id="fw-rel"><option value="">Loading…</option></select>
+        <div class="msg" id="fw-gh-msg"></div>
+        <button class="danger" id="fw-gh-btn" disabled>Update to this version</button>
+        <div class="muted small">Downloads the firmware straight from GitHub and installs it. The
+          bridge restarts and rolls back if the new version fails to start.</div>
       </div>
 
-      <div class="staged" id="fw-staged" hidden>
-        <dl>
-          <dt>Firmware</dt><dd id="fw-version"></dd>
-          <dt>Built</dt><dd id="fw-built"></dd>
-          <dt>Size</dt><dd id="fw-size"></dd>
-          <dt>SHA-256</dt><dd id="fw-sha" class="mono muted"></dd>
-        </dl>
-        <button class="danger" id="fw-btn">Update bridge</button>
-        <div class="muted small">The bridge restarts into the new version and goes back to the
-          current one if the new one fails to start.</div>
+      <div class="fwtab" data-fwtab="manual" hidden>
+        <label for="fw-file">Firmware file (<span class="mono">build/svs_bridge.bin</span>)</label>
+        <div class="file">
+          <input type="file" id="fw-file" class="file-input" accept=".bin">
+          <label for="fw-file" class="btn secondary">Choose file</label>
+          <span class="file-name">No file chosen</span>
+        </div>
+        <div class="staged" id="fw-staged" hidden>
+          <dl>
+            <dt>Firmware</dt><dd id="fw-version"></dd>
+            <dt>Built</dt><dd id="fw-built"></dd>
+            <dt>Size</dt><dd id="fw-size"></dd>
+            <dt>SHA-256</dt><dd id="fw-sha" class="mono muted"></dd>
+          </dl>
+          <button class="danger" id="fw-btn">Update bridge</button>
+          <div class="muted small">The bridge restarts into the new version and goes back to the
+            current one if the new one fails to start.</div>
+        </div>
       </div>
+
       <progress id="fw-progress" value="0" max="100" hidden></progress>
       <div class="msg" id="fw-msg"></div>
     </section>
+    </div><!-- /firmware tab -->
 
+    <div class="tab" data-tab="settings" hidden>
     <section>
       <h2>Home Assistant</h2>
       <p class="muted small">The bridge is discovered automatically on your network. Paste this API
@@ -313,6 +359,7 @@
         the certificate. The bridge restarts in setup mode with its own network.</div>
       <div class="msg" id="device-msg"></div>
     </section>
+    </div><!-- /settings tab -->
   </div>
 </main>
 
@@ -413,7 +460,7 @@ function showAuth(view) {
   $('login').hidden = view !== 'login';
   $('app').hidden = view !== 'app';
   if (view === 'login' && wasApp) $('login-pw').focus();
-  if (view === 'app') { refresh(); refreshSvs(); startLog(); loadApiToken(); }
+  if (view === 'app') { restoreTab(); refresh(); refreshSvs(); startLog(); loadApiToken(); }
 }
 
 // --- Home Assistant API token ----------------------------------------------
@@ -490,6 +537,7 @@ function render(s) {
     ? `<span class="ok">Connected</span> to ${esc(w.ssid)} · ${w.ip} · ${w.rssi} dBm`
     : `<span class="bad">Not connected</span>` + (w.ssid ? ` (trying ${esc(w.ssid)})` : '');
   $('st-fw').textContent = `${s.firmware.version} · ${s.firmware.partition} · built ${s.firmware.built}`;
+  $('fw-current').textContent = `${s.firmware.project} ${s.firmware.version}`;
   $('st-up').textContent = `${duration(s.firmware.uptime_s)} · last start: ${s.firmware.reset_reason}`;
   $('st-up').className = /crash|watchdog|brownout|glitch|lockup/.test(s.firmware.reset_reason) ? 'bad' : '';
   $('st-tls').textContent = s.tls.source === 'custom' ? 'Custom' : 'Self-signed';
@@ -1145,6 +1193,89 @@ $('reset-btn').onclick = async () => {
   const ap = status ? status.wifi.ap_ssid : 'SVS-Bridge-XXXX';
   setMsg($('device-msg'), `Reset done. Join the "${ap}" network to set up the bridge again.`, 'ok');
   for (const b of document.querySelectorAll('button')) b.disabled = true;
+};
+
+// --- Navigation (tabs) ------------------------------------------------------
+
+function showTab(name) {
+  for (const b of document.querySelectorAll('#tabs button'))
+    b.classList.toggle('active', b.dataset.tab === name);
+  for (const p of document.querySelectorAll('.tab'))
+    p.hidden = p.dataset.tab !== name;
+  try { localStorage.setItem('tab', name); } catch (e) { /* ignore */ }
+  if (name === 'firmware') loadReleases();
+}
+for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
+
+function restoreTab() {
+  let name = 'svs';
+  try { name = localStorage.getItem('tab') || 'svs'; } catch (e) { /* ignore */ }
+  if (!document.querySelector(`#tabs button[data-tab="${name}"]`)) name = 'svs';
+  showTab(name);
+}
+
+// Firmware source sub-tabs: from GitHub (default) or a manual file
+for (const b of document.querySelectorAll('#fw-tabs button')) {
+  b.onclick = () => {
+    for (const x of document.querySelectorAll('#fw-tabs button')) x.classList.toggle('active', x === b);
+    for (const p of document.querySelectorAll('.fwtab')) p.hidden = p.dataset.fwtab !== b.dataset.fwtab;
+  };
+}
+
+// --- Bridge firmware from GitHub --------------------------------------------
+
+let releasesLoaded = false;
+async function loadReleases(force) {
+  if (releasesLoaded && !force) return;
+  const sel = $('fw-rel'), msg = $('fw-gh-msg'), btn = $('fw-gh-btn');
+  sel.innerHTML = '<option value="">Loading…</option>';
+  setMsg(msg, '');
+  try {
+    const data = await api('/device/releases');
+    releasesLoaded = true;
+    sel.innerHTML = '';
+    if (!data.releases || !data.releases.length) {
+      sel.innerHTML = '<option value="">No releases found</option>';
+      btn.disabled = true;
+      return;
+    }
+    for (const r of data.releases) {
+      const o = document.createElement('option');
+      const installed = r.tag.replace(/^v/, '') === data.running;
+      o.value = r.tag;
+      o.textContent = r.tag + (r.prerelease ? ' · pre-release' : '') + (installed ? ' · installed' : '');
+      sel.appendChild(o);
+    }
+    btn.disabled = false;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Unavailable</option>';
+    setMsg(msg, e.message, 'warn');
+    btn.disabled = true;
+  }
+}
+
+$('fw-gh-btn').onclick = async () => {
+  const tag = $('fw-rel').value;
+  if (!tag) return;
+  if (!confirm(`Update the bridge to ${tag}?\n\nIt downloads the firmware from GitHub and restarts.`)) return;
+  const msg = $('fw-msg'), bar = $('fw-progress');
+  const before = status ? status.firmware.partition : null;
+  $('fw-gh-btn').disabled = true;
+  $('fw-rel').disabled = true;
+  bar.hidden = false;
+  bar.removeAttribute('value');  // indeterminate: the bridge downloads server-side
+  setMsg(msg, 'Downloading from GitHub and installing… (this can take a minute)');
+  try {
+    await post('/device/ota/github', {tag});
+  } catch (e) {
+    setMsg(msg, 'Update failed: ' + e.message, 'bad');
+    $('fw-gh-btn').disabled = false;
+    $('fw-rel').disabled = false;
+    bar.hidden = true;
+    return;
+  }
+  setMsg(msg, 'Installed. Restarting…');
+  waitForReboot({partition: before, version: tag});
 };
 
 // --- Init -------------------------------------------------------------------

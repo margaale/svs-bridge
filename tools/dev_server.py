@@ -252,6 +252,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(NETWORKS)
         elif path == "/device/api-token":
             self.send_json({"token": auth["api_token"]})
+        elif path == "/device/releases":
+            time.sleep(0.6)
+            running = state["firmware"]["version"]
+            size = BUILD_BIN.stat().st_size if BUILD_BIN.exists() else 1353024
+            self.send_json({"running": running, "releases": [
+                {"tag": "v0.3.0", "name": "v0.3.0", "notes_url": "https://github.com/margaale/svs-bridge/releases",
+                 "prerelease": False, "size": size},
+                {"tag": "v" + running, "name": "v" + running, "notes_url": "", "prerelease": False, "size": size},
+                {"tag": "v0.4.0-alpha.2", "name": "v0.4.0-alpha.2", "notes_url": "", "prerelease": True, "size": size},
+            ]})
         elif path == "/device/cert":
             self.send_body(200, "-----BEGIN CERTIFICATE-----\nMOCK\n-----END CERTIFICATE-----\n",
                            "application/x-pem-file")
@@ -296,6 +306,14 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(1)
             major, minor, patch = state["firmware"]["version"].split(".")
             state["firmware"]["version"] = f"{major}.{minor}.{int(patch) + 1}"
+            part = state["firmware"]["partition"]
+            state["firmware"]["partition"] = "ota_1" if part == "ota_0" else "ota_0"
+            self.send_json({"ok": True})
+        elif path == "/device/ota/github":
+            time.sleep(2)
+            tag = json.loads(body or b"{}").get("tag", "").lstrip("v")
+            if tag:
+                state["firmware"]["version"] = tag
             part = state["firmware"]["partition"]
             state["firmware"]["partition"] = "ota_1" if part == "ota_0" else "ota_0"
             self.send_json({"ok": True})
