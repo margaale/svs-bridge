@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SVS Bridge setup</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 12h14l-4-4M24 20H10l4 4' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1d2129; --muted: #6b7280;
+    --border: #e2e5ea; --accent: #2563eb; --ok: #15803d; --bad: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111318; --card: #1b1e25; --text: #e6e8ec; --muted: #9aa1ad;
+      --border: #2c313b; --accent: #5b8cff; --ok: #4ade80; --bad: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 480px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  h2 { font-size: 16px; margin: 0 0 4px; }
+  .step { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+  p.hint { color: var(--muted); margin: 0 0 8px; font-size: 13px; }
+  section {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+  input {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  button {
+    margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 6px;
+    background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+  button:disabled { opacity: .5; cursor: default; }
+  .lock { width: 12px; height: 12px; color: var(--muted); flex: none; }
+  .bars { color: var(--muted); flex: none; }
+  .combo-row { display: flex; gap: 8px; align-items: stretch; }
+  .combo { position: relative; flex: 1; }
+  button.icon { margin: 0; padding: 0 10px; display: flex; align-items: center; line-height: 0; }
+  button.icon.spin svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .combo input { padding-right: 40px; }
+  .combo-toggle {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
+    display: flex; line-height: 0;
+  }
+  .combo-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10;
+    list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  }
+  .combo-list li {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .combo-list li:hover, .combo-list li.active { background: var(--bg); }
+  .combo-list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-list li.note { color: var(--muted); cursor: default; }
+  .combo-list li.note:hover { background: transparent; }
+  .pw { position: relative; }
+  .pw input { padding-right: 40px; }
+  .pw button.eye {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
+    display: flex; line-height: 0;
+  }
+  .pw button.eye:hover { color: var(--text); }
+  .muted { color: var(--muted); } .ok { color: var(--ok); } .bad { color: var(--bad); }
+  .msg { margin-top: 10px; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>SVS Bridge setup</h1>
+  <p class="step" id="step"></p>
+
+  <!-- Step 1a: no password yet -->
+  <section id="create" hidden>
+    <h2>Create the admin password</h2>
+    <p class="hint">You will use it to log in to the bridge. At least 8 characters.</p>
+    <form id="create-form">
+      <input type="text" name="username" value="admin" autocomplete="username" hidden>
+      <label for="new-pw">Password</label>
+      <input type="password" id="new-pw" autocomplete="new-password" minlength="8" maxlength="64">
+      <label for="new-pw2">Repeat password</label>
+      <input type="password" id="new-pw2" autocomplete="new-password" minlength="8" maxlength="64">
+      <button type="submit">Continue</button>
+    </form>
+    <div class="msg" id="create-msg"></div>
+  </section>
+
+  <!-- Step 1b: password already set -->
+  <section id="login" hidden>
+    <h2>Enter the admin password</h2>
+    <p class="hint">Forgot it? Hold the BOOT button for 10 s to erase all settings.</p>
+    <form id="login-form">
+      <input type="text" name="username" value="admin" autocomplete="username" hidden>
+      <label for="login-pw">Password</label>
+      <input type="password" id="login-pw" autocomplete="current-password" maxlength="64">
+      <button type="submit">Continue</button>
+    </form>
+    <div class="msg" id="login-msg"></div>
+  </section>
+
+  <!-- Step 2 -->
+  <section id="wifi" hidden>
+    <h2>Connect to your WiFi</h2>
+    <form id="wifi-form" autocomplete="off">
+    <label for="ssid">Network</label>
+    <div class="combo-row">
+      <div class="combo">
+        <input type="text" id="ssid" autocomplete="off" maxlength="32" placeholder="Choose or type a network"
+               role="combobox" aria-controls="ssid-list" aria-autocomplete="list">
+        <button type="button" class="combo-toggle" id="ssid-toggle" aria-label="Show networks">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
+        <ul class="combo-list" id="ssid-list" role="listbox" hidden></ul>
+      </div>
+      <button type="button" class="secondary icon" id="scan-btn" aria-label="Scan again" title="Scan again">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+    <label for="password">Password</label>
+    <input type="password" id="password" autocomplete="off" maxlength="63">
+    <button type="submit" id="connect-btn">Connect</button>
+    </form>
+    <div class="msg" id="wifi-msg"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const LOCK = '<svg class="lock" viewBox="0 0 16 16" aria-label="secured"><path fill="currentColor" ' +
+  'd="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2 6H6V4.5a2 2 0 1 1 4 0V7z"/></svg>';
+
+// Eye button inside every password field to show / hide what was typed
+const EYE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 ' +
+  '11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 ' +
+  '10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 ' +
+  '0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>' +
+  '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function addPasswordToggles() {
+  for (const input of document.querySelectorAll('input[type=password]')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pw';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'eye';
+    btn.innerHTML = EYE;
+    btn.setAttribute('aria-label', 'Show password');
+    btn.onclick = () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    };
+    wrap.appendChild(btn);
+  }
+}
+addPasswordToggles();
+
+function setMsg(id, text, cls) {
+  $(id).textContent = text;
+  $(id).className = 'msg ' + (cls || '');
+}
+
+function esc(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// Throws an Error carrying the HTTP status and the server's message
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(body.error || res.statusText);
+    err.status = res.status;
+    err.retryAfter = body.retry_after;
+    throw err;
+  }
+  return body;
+}
+
+function post(path, data) {
+  return api(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data || {}),
+  });
+}
+
+function show(step) {
+  for (const id of ['create', 'login', 'wifi']) $(id).hidden = id !== step;
+  $('step').textContent = step === 'wifi' ? 'Step 2 of 2' : 'Step 1 of 2';
+  if (step === 'wifi') networks.scan();  // have the list ready when the menu opens
+}
+
+// --- Step 1 -----------------------------------------------------------------
+
+$('create-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = $('new-pw').value;
+  if (pw.length < 8) { setMsg('create-msg', 'Use at least 8 characters', 'bad'); return; }
+  if (pw !== $('new-pw2').value) { setMsg('create-msg', 'The passwords do not match', 'bad'); return; }
+  try {
+    await post('/device/setup-password', {password: pw});
+    show('wifi');
+  } catch (err) {
+    if (err.status === 409) { show('login'); return; }  // set meanwhile
+    setMsg('create-msg', err.message, 'bad');
+  }
+};
+
+$('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await post('/device/login', {password: $('login-pw').value});
+    show('wifi');
+  } catch (err) {
+    const text = err.status === 429
+      ? `Too many attempts. Try again in ${err.retryAfter} s.` : err.message;
+    setMsg('login-msg', text, 'bad');
+  }
+};
+
+// --- Step 2 -----------------------------------------------------------------
+
+function signalBars(rssi) {
+  const level = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  let svg = `<svg class="bars" viewBox="0 0 16 12" width="16" height="12"><title>${rssi} dBm</title>`;
+  for (let i = 0; i < 4; i++) {
+    const h = 3 + i * 3;
+    svg += `<rect x="${i * 4}" y="${12 - h}" width="3" height="${h}" rx="0.5" fill="currentColor"` +
+           ` opacity="${i < level ? 1 : 0.25}"/>`;
+  }
+  return svg + '</svg>';
+}
+
+// Network picker: type to filter the scanned networks, or enter a hidden
+// one by name. The scan button next to it refreshes the list.
+function networkCombo(onPick, onUnauthorized) {
+  const input = $('ssid'), list = $('ssid-list'), scanBtn = $('scan-btn');
+  let nets = null, scanning = false, active = -1, shown = [];
+
+  function render() {
+    list.innerHTML = '';
+    if (scanning && !nets) {
+      list.innerHTML = '<li class="note">Scanning…</li>';
+      return;
+    }
+    const q = input.value.trim().toLowerCase();
+    shown = (nets || []).filter((n) => !q || n.ssid.toLowerCase().includes(q));
+    shown.forEach((n, i) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      if (i === active) li.className = 'active';
+      li.innerHTML = `<span class="name">${esc(n.ssid)}</span>${n.secure ? LOCK : ''}${signalBars(n.rssi)}`;
+      li.onclick = () => pick(n);
+      list.appendChild(li);
+    });
+    if (!shown.length) {
+      const note = q ? 'No match; it will be used as typed' : 'No networks found';
+      list.innerHTML = `<li class="note">${note}</li>`;
+    }
+  }
+
+  async function scan() {
+    scanning = true;
+    scanBtn.disabled = true;
+    scanBtn.classList.add('spin');
+    render();
+    try {
+      nets = await api('/device/scan');
+    } catch (err) {
+      if (err.status === 401) { close(); onUnauthorized(); }
+      nets = nets || [];
+    }
+    scanning = false;
+    scanBtn.disabled = false;
+    scanBtn.classList.remove('spin');
+    active = -1;
+    if (!list.hidden) render();
+  }
+
+  function open() {
+    list.hidden = false;
+    if (!nets && !scanning) scan(); else render();
+  }
+  function close() { list.hidden = true; active = -1; }
+  function pick(n) { input.value = n.ssid; close(); onPick(n); }
+
+  // Keep focus in the input while using the list, so picking works
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  input.addEventListener('focus', open);
+  input.addEventListener('blur', close);
+  input.addEventListener('input', () => { active = -1; list.hidden = false; render(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      if (list.hidden) { open(); return; }
+      active = Math.min(active + 1, shown.length - 1);
+      render();
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+      active = Math.max(active - 1, 0);
+      render();
+      e.preventDefault();
+    } else if (e.key === 'Enter' && !list.hidden && active >= 0) {
+      pick(shown[active]);
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+  $('ssid-toggle').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (list.hidden) { input.focus(); open(); } else { close(); }
+  });
+  scanBtn.addEventListener('mousedown', (e) => e.preventDefault());  // keep the list open
+  scanBtn.onclick = scan;
+  return {scan};
+}
+
+const networks = networkCombo(() => $('password').focus(), () => show('login'));
+
+$('wifi-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const ssid = $('ssid').value.trim();
+  if (!ssid) { setMsg('wifi-msg', 'Enter a network name', 'bad'); return; }
+  $('connect-btn').disabled = true;
+  setMsg('wifi-msg', 'Connecting to ' + ssid + '…');
+  try {
+    await post('/device/wifi', {ssid, password: $('password').value});
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 1500));
+      let w;
+      try { w = (await api('/api/status')).wifi; } catch (e) { continue; }
+      if (w.connected && w.ssid === ssid) {
+        setMsg('wifi-msg', `Connected to ${ssid}. This setup network closes in a few seconds; ` +
+                           `then open https://${w.hostname} from your usual network.`, 'ok');
+        return;  // leave the form disabled: the bridge is set up
+      }
+    }
+    setMsg('wifi-msg', 'Could not connect. Check the password and try again.', 'bad');
+  } catch (err) {
+    if (err.status === 401) { show('login'); return; }
+    setMsg('wifi-msg', 'Error: ' + err.message, 'bad');
+  }
+  $('connect-btn').disabled = false;
+};
+
+// --- Init -------------------------------------------------------------------
+
+(async () => {
+  try {
+    const a = await api('/device/auth');
+    show(a.authenticated ? 'wifi' : a.password_set ? 'login' : 'create');
+  } catch (e) {
+    show('create');
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SVS Bridge</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 12h14l-4-4M24 20H10l4 4' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #ffffff; --text: #1d2129; --muted: #6b7280;
+    --border: #e2e5ea; --accent: #2563eb; --ok: #15803d; --bad: #b91c1c; --warn: #b45309;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #111318; --card: #1b1e25; --text: #e6e8ec; --muted: #9aa1ad;
+      --border: #2c313b; --accent: #5b8cff; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; margin: 8px 0 16px; display: flex; align-items: baseline; gap: 8px; }
+  h1 small { font-size: 13px; color: var(--muted); font-weight: normal; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  section {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  dt { color: var(--muted); }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); } .warn { color: var(--warn); }
+  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+  .small { font-size: 13px; margin-top: 10px; }
+  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+  input[type=text], input[type=password], select {
+    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font: inherit;
+  }
+  button {
+    margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 6px;
+    background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+  }
+  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
+  button + button { margin-left: 8px; }
+  button:disabled { opacity: .5; cursor: default; }
+  .lock { width: 12px; height: 12px; color: var(--muted); flex: none; }
+  .bars { color: var(--muted); flex: none; }
+  .combo-row { display: flex; gap: 8px; align-items: stretch; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn-row button { width: auto; flex: 1; min-width: 120px; }
+  .combo { position: relative; flex: 1; }
+  .combo input { padding-right: 40px; }
+  .combo-toggle {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
+    display: flex; line-height: 0;
+  }
+  .combo-list {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10;
+    list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+  }
+  .combo-list li {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  }
+  .combo-list li:hover, .combo-list li.active { background: var(--bg); }
+  .combo-list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-list li.note { color: var(--muted); cursor: default; }
+  .combo-list li.note:hover { background: transparent; }
+  button.icon { margin: 0; padding: 0 10px; display: flex; align-items: center; line-height: 0; }
+  .log-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 14px; }
+  .log-head label { margin-bottom: 4px; }
+  button.link { margin: 0; padding: 0; background: transparent; color: var(--accent); font-size: 13px; }
+  .log {
+    height: 220px; overflow-y: auto; padding: 8px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: var(--bg);
+    font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .log .t { color: var(--muted); }
+  .log .tx { color: var(--accent); }
+  .log .ev { color: var(--muted); font-style: italic; }
+  .log .empty { color: var(--muted); }
+  .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; margin: 4px 0; }
+  .toggle input { width: 18px; height: 18px; cursor: pointer; }
+  .send-row { display: flex; gap: 8px; margin-top: 8px; }
+  .send-row input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
+  .send-row button { margin: 0; }
+  /* File picker: the native input stays (for keyboard and forms) but hidden
+     behind a button-styled label and the chosen file name */
+  .file { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  label.btn {
+    display: inline-block; margin: 0; padding: 9px 16px; border-radius: 6px; cursor: pointer;
+    font-size: 15px; white-space: nowrap;
+  }
+  label.btn.secondary { color: var(--accent); border: 1px solid var(--border); background: transparent; }
+  label.btn:hover { background: var(--bg); }
+  .file-input:focus-visible + label.btn { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .file-input:disabled + label.btn { opacity: .5; cursor: default; pointer-events: none; }
+  .file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-name.chosen { color: var(--text); }
+  button.icon.spin svg { animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pw { position: relative; }
+  .pw input { padding-right: 40px; }
+  .pw button.eye {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
+    display: flex; line-height: 0;
+  }
+  .pw button.eye:hover { color: var(--text); }
+  .staged { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+  progress { width: 100%; height: 8px; margin-top: 12px; }
+  .msg { margin-top: 10px; min-height: 1.2em; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>SVS Bridge <small id="version"></small></h1>
+
+  <!-- Shown until logged in -->
+  <section id="create" hidden>
+    <h2>Create the admin password</h2>
+    <p class="muted small">You will use it to log in to the bridge. At least 8 characters.</p>
+    <form id="create-form">
+      <input type="text" name="username" value="admin" autocomplete="username" hidden>
+      <label for="new-pw">Password</label>
+      <input type="password" id="new-pw" autocomplete="new-password" minlength="8" maxlength="64">
+      <label for="new-pw2">Repeat password</label>
+      <input type="password" id="new-pw2" autocomplete="new-password" minlength="8" maxlength="64">
+      <button type="submit">Continue</button>
+    </form>
+    <div class="msg" id="create-msg"></div>
+  </section>
+
+  <section id="login" hidden>
+    <h2>Log in</h2>
+    <form id="login-form">
+      <input type="text" name="username" value="admin" autocomplete="username" hidden>
+      <label for="login-pw">Admin password</label>
+      <input type="password" id="login-pw" autocomplete="current-password" maxlength="64">
+      <button type="submit">Log in</button>
+    </form>
+    <div class="msg" id="login-msg"></div>
+    <p class="muted small">Forgot it? Hold the BOOT button for 10 s to erase all settings.</p>
+  </section>
+
+  <div id="app" hidden>
+    <section>
+      <h2>SVS</h2>
+      <dl>
+        <dt>Connection</dt><dd id="svs-conn">…</dd>
+        <dt>Firmware</dt><dd id="svs-fw">…</dd>
+        <dt>Inputs</dt><dd id="svs-inputs">…</dd>
+      </dl>
+      <label class="toggle">
+        <input type="checkbox" id="svs-send-toggle">
+        <span>Send commands to the SVS</span>
+      </label>
+      <div class="muted small" id="svs-mode-hint"></div>
+      <button class="secondary" id="svs-restart-btn" hidden>Restart SVS</button>
+      <div class="msg" id="svs-restart-msg"></div>
+      <div class="log-head">
+        <label>Serial log</label>
+        <button type="button" class="link" id="svs-log-clear">Clear</button>
+      </div>
+      <div class="log" id="svs-log" role="log" aria-live="polite"></div>
+      <form id="svs-send-form" class="send-row" autocomplete="off">
+        <input type="text" id="svs-cmd" maxlength="128" placeholder="Command, e.g. SVS_Input_Up"
+               aria-label="Command to send to the SVS">
+        <button type="submit" class="secondary" id="svs-send-btn">Send</button>
+      </form>
+      <div class="msg" id="svs-send-msg"></div>
+    </section>
+
+    <section id="svs-fw-section" hidden>
+      <h2>SVS firmware update</h2>
+      <div class="muted small">Identifies the SVS bootloader first. The SVS restarts, so video
+        drops for a moment. Nothing is written until you press Flash SVS.</div>
+      <button class="secondary" id="svs-check-btn">Prepare update</button>
+      <dl id="svs-boot-row" class="staged" hidden>
+        <dt>Bootloader</dt><dd id="svs-boot"></dd>
+      </dl>
+      <div id="svs-vector" hidden>
+        <button class="secondary" id="svs-preview-btn">Preview vector patch</button>
+        <div class="muted small">This bootloader needs the reset vector patched when flashing. The
+          preview checks —without writing anything— that the patch the bridge would write matches
+          what the official tool already put on the chip. Required before flashing.</div>
+      </div>
+      <div class="msg" id="svs-check-msg"></div>
+      <div id="svs-probe" hidden>
+        <button class="secondary" id="svs-probe-btn">Diagnose bootloader</button>
+        <div class="muted small">Restarts the SVS a few times, listening and trying to reach its
+          bootloader with other timings and speeds. Results go to the serial log. Nothing is written.</div>
+      </div>
+
+      <div id="svs-controls" hidden>
+        <label for="svs-rel">Official releases</label>
+        <select id="svs-rel"><option value="">Choose a version…</option></select>
+        <label for="svs-file">Or a .hex file</label>
+        <div class="file">
+          <input type="file" id="svs-file" class="file-input" accept=".hex">
+          <label for="svs-file" class="btn secondary">Choose file</label>
+          <span class="file-name">No file chosen</span>
+        </div>
+
+        <div class="staged" id="svs-staged" hidden>
+          <dl>
+            <dt>Firmware</dt><dd id="svs-src"></dd>
+            <dt>Size</dt><dd id="svs-size"></dd>
+            <dt>SHA-256</dt><dd id="svs-sha" class="mono muted"></dd>
+          </dl>
+          <button class="danger" id="svs-flash-btn">Flash SVS</button>
+          <div class="msg bad" id="svs-blocker"></div>
+        </div>
+      </div>
+      <progress id="svs-progress" value="0" max="100" hidden></progress>
+      <div class="msg" id="svs-msg"></div>
+    </section>
+
+    <section>
+      <h2>Bridge</h2>
+      <dl>
+        <dt>WiFi</dt><dd id="st-wifi">…</dd>
+        <dt>Firmware</dt><dd id="st-fw">…</dd>
+        <dt>Uptime</dt><dd id="st-up">…</dd>
+        <dt>Certificate</dt>
+        <dd><span id="st-tls"></span><br>
+          <span id="st-fp" class="mono muted"></span><br>
+          <a href="/device/cert">Download certificate</a></dd>
+      </dl>
+    </section>
+
+    <section>
+      <h2>WiFi network</h2>
+      <form id="wifi-form" autocomplete="off">
+      <label for="ssid">Network</label>
+      <div class="combo-row">
+        <div class="combo">
+          <input type="text" id="ssid" autocomplete="off" maxlength="32" placeholder="Choose or type a network"
+                 role="combobox" aria-controls="ssid-list" aria-autocomplete="list">
+          <button type="button" class="combo-toggle" id="ssid-toggle" aria-label="Show networks">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <ul class="combo-list" id="ssid-list" role="listbox" hidden></ul>
+        </div>
+        <button type="button" class="secondary icon" id="scan-btn" aria-label="Scan again" title="Scan again">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+      <label for="password">Password</label>
+      <input type="password" id="password" autocomplete="off" maxlength="63">
+      <button type="submit" id="wifi-btn">Connect</button>
+      </form>
+      <div class="msg" id="wifi-msg"></div>
+    </section>
+
+    <section>
+      <h2>Bridge firmware update</h2>
+      <label for="fw-file">Firmware file (<span class="mono">build/svs_bridge.bin</span>)</label>
+      <div class="file">
+        <input type="file" id="fw-file" class="file-input" accept=".bin">
+        <label for="fw-file" class="btn secondary">Choose file</label>
+        <span class="file-name">No file chosen</span>
+      </div>
+
+      <div class="staged" id="fw-staged" hidden>
+        <dl>
+          <dt>Firmware</dt><dd id="fw-version"></dd>
+          <dt>Built</dt><dd id="fw-built"></dd>
+          <dt>Size</dt><dd id="fw-size"></dd>
+          <dt>SHA-256</dt><dd id="fw-sha" class="mono muted"></dd>
+        </dl>
+        <button class="danger" id="fw-btn">Update bridge</button>
+        <div class="muted small">The bridge restarts into the new version and goes back to the
+          current one if the new one fails to start.</div>
+      </div>
+      <progress id="fw-progress" value="0" max="100" hidden></progress>
+      <div class="msg" id="fw-msg"></div>
+    </section>
+
+    <section>
+      <h2>Home Assistant</h2>
+      <p class="muted small">The bridge is discovered automatically on your network. Paste this API
+        token when adding it, so Home Assistant can read the SVS state.</p>
+      <label for="api-token">API token</label>
+      <input type="password" id="api-token" class="mono" readonly value="…">
+      <div class="btn-row">
+        <button type="button" class="secondary" id="api-copy-btn">Copy</button>
+        <button type="button" class="secondary" id="api-regen-btn">Regenerate</button>
+      </div>
+      <div class="muted small">Regenerating revokes the old token; you must update it in Home Assistant.</div>
+      <div class="msg" id="api-msg"></div>
+    </section>
+
+    <section>
+      <h2>Device</h2>
+      <button class="secondary" id="logout-btn">Log out</button>
+      <button class="secondary" id="reboot-btn">Reboot</button>
+      <button class="danger" id="reset-btn">Factory reset</button>
+      <div class="muted small">Factory reset erases the WiFi settings, the admin password and
+        the certificate. The bridge restarts in setup mode with its own network.</div>
+      <div class="msg" id="device-msg"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const LOCK = '<svg class="lock" viewBox="0 0 16 16" aria-label="secured"><path fill="currentColor" ' +
+  'd="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2 6H6V4.5a2 2 0 1 1 4 0V7z"/></svg>';
+let status = null;
+let svs = null;
+let svsStaging = false;  // a chosen SVS firmware is being downloaded / checked
+
+// Eye button inside every password field to show / hide what was typed
+const EYE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 ' +
+  '11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 ' +
+  '10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 ' +
+  '0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>' +
+  '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function addPasswordToggles() {
+  for (const input of document.querySelectorAll('input[type=password]')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pw';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'eye';
+    btn.innerHTML = EYE;
+    btn.setAttribute('aria-label', 'Show password');
+    btn.onclick = () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    };
+    wrap.appendChild(btn);
+  }
+}
+addPasswordToggles();
+
+// Shows the chosen file name next to a styled file picker. Call it after
+// clearing an input from code too, as that fires no change event.
+function showFileName(input) {
+  const name = input.parentElement.querySelector('.file-name');
+  const file = input.files[0];
+  name.textContent = file ? file.name : 'No file chosen';
+  name.classList.toggle('chosen', !!file);
+}
+for (const input of document.querySelectorAll('.file-input')) {
+  input.addEventListener('change', () => showFileName(input));
+}
+
+function setMsg(el, text, cls) {
+  el.textContent = text;
+  el.className = 'msg ' + (cls || '');
+}
+
+function esc(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+// Throws an Error carrying the HTTP status and the server's message. A 401
+// means the session is gone (e.g. after a reboot): back to the login form.
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const text = await res.text();
+  let body;
+  try { body = JSON.parse(text); } catch (e) { body = {error: text}; }
+  if (!res.ok) {
+    if (res.status === 401 && path !== '/device/login') showAuth('login');
+    const err = new Error(body.error || res.statusText);
+    err.status = res.status;
+    err.retryAfter = body.retry_after;
+    throw err;
+  }
+  return body;
+}
+
+function post(path, data) {
+  return api(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data || {}),
+  });
+}
+
+// --- Login ------------------------------------------------------------------
+
+function showAuth(view) {
+  const wasApp = !$('app').hidden;
+  $('create').hidden = view !== 'create';
+  $('login').hidden = view !== 'login';
+  $('app').hidden = view !== 'app';
+  if (view === 'login' && wasApp) $('login-pw').focus();
+  if (view === 'app') { refresh(); refreshSvs(); startLog(); loadApiToken(); }
+}
+
+// --- Home Assistant API token ----------------------------------------------
+
+async function loadApiToken() {
+  try { $('api-token').value = (await api('/device/api-token')).token; }
+  catch (e) { /* not logged in, or busy */ }
+}
+
+$('api-copy-btn').onclick = async () => {
+  const token = $('api-token').value;
+  try {
+    await navigator.clipboard.writeText(token);
+    setMsg($('api-msg'), 'Token copied to the clipboard', 'ok');
+  } catch (e) {
+    // Clipboard needs a secure context/permission; fall back to selecting it
+    const input = $('api-token'), was = input.type;
+    input.type = 'text'; input.select();
+    setMsg($('api-msg'), 'Copy the selected token (Ctrl+C)', '');
+    input.type = was;
+  }
+};
+
+$('api-regen-btn').onclick = async () => {
+  if (!confirm('Regenerate the API token? Home Assistant will stop working until you update it.')) return;
+  try {
+    $('api-token').value = (await post('/device/api-token/regenerate')).token;
+    setMsg($('api-msg'), 'New token generated. Update it in Home Assistant.', 'ok');
+  } catch (err) {
+    setMsg($('api-msg'), err.message, 'bad');
+  }
+};
+
+$('create-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = $('new-pw').value;
+  if (pw.length < 8) { setMsg($('create-msg'), 'Use at least 8 characters', 'bad'); return; }
+  if (pw !== $('new-pw2').value) { setMsg($('create-msg'), 'The passwords do not match', 'bad'); return; }
+  try {
+    await post('/device/setup-password', {password: pw});
+    showAuth('app');
+  } catch (err) {
+    if (err.status === 409) { showAuth('login'); return; }
+    setMsg($('create-msg'), err.message, 'bad');
+  }
+};
+
+$('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await post('/device/login', {password: $('login-pw').value});
+    $('login-pw').value = '';
+    setMsg($('login-msg'), '');
+    showAuth('app');
+  } catch (err) {
+    const text = err.status === 429
+      ? `Too many attempts. Try again in ${err.retryAfter} s.` : err.message;
+    setMsg($('login-msg'), text, 'bad');
+  }
+};
+
+$('logout-btn').onclick = async () => {
+  try { await post('/device/logout'); } catch (e) { /* ignore */ }
+  showAuth('login');
+};
+
+// --- Bridge status ----------------------------------------------------------
+
+function render(s) {
+  status = s;
+  $('version').textContent = 'v' + s.firmware.version;
+  const w = s.wifi;
+  $('st-wifi').innerHTML = w.connected
+    ? `<span class="ok">Connected</span> to ${esc(w.ssid)} · ${w.ip} · ${w.rssi} dBm`
+    : `<span class="bad">Not connected</span>` + (w.ssid ? ` (trying ${esc(w.ssid)})` : '');
+  $('st-fw').textContent = `${s.firmware.version} · ${s.firmware.partition} · built ${s.firmware.built}`;
+  $('st-up').textContent = `${duration(s.firmware.uptime_s)} · last start: ${s.firmware.reset_reason}`;
+  $('st-up').className = /crash|watchdog|brownout|glitch|lockup/.test(s.firmware.reset_reason) ? 'bad' : '';
+  $('st-tls').textContent = s.tls.source === 'custom' ? 'Custom' : 'Self-signed';
+  $('st-fp').textContent = 'SHA-256 ' + s.tls.fingerprint;
+}
+
+function duration(seconds) {
+  const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24;
+  const m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : m ? `${m} min ${s} s` : `${s} s`;
+}
+
+async function refresh() {
+  try { render(await api('/api/status')); } catch (e) { /* device busy or rebooting */ }
+}
+
+// --- SVS --------------------------------------------------------------------
+
+function renderSvs(s) {
+  svs = s;
+  $('svs-conn').innerHTML = s.connected
+    ? '<span class="ok">Connected</span>' : '<span class="bad">Not connected</span>';
+  // Known from what the SVS prints when it starts and on input changes (there
+  // is no command to ask for it). After a restart of the bridge these are the
+  // last known values until the SVS reports again.
+  const unknown = '<span class="muted">Unknown until the SVS restarts</span>';
+  const lastKnown = (live) => live ? '' : ' <span class="muted">(last known)</span>';
+  $('svs-fw').innerHTML = s.firmware
+    ? esc(s.firmware.replace(/^SVS_FW_/, '')) + lastKnown(s.live) : unknown;
+  // Input 0 is the SVS's "no input selected"
+  const current = s.current_input == null ? '?' : s.current_input === 0 ? '0 (none)' : s.current_input;
+  $('svs-inputs').innerHTML = s.total_inputs != null
+    ? `${s.total_inputs} (current: ${current})` + lastKnown(s.inputs_live)
+    : unknown;
+  $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
+
+  // Send vs. listen-only mode
+  const send = s.send_enabled;
+  $('svs-send-toggle').checked = send;
+  $('svs-mode-hint').textContent = send
+    ? "The bridge can send commands and update the SVS firmware. Keep the RetroTINK's HD-15 "
+      + "disconnected while sending — the SVS shares that line."
+    : "The bridge only listens to the SVS (its active input). Turn this on to send commands or "
+      + "update firmware; disconnect the RetroTINK's HD-15 first.";
+  $('svs-restart-btn').hidden = !send;
+  $('svs-send-form').hidden = !send;
+  $('svs-fw-section').hidden = !send;
+
+  const u = s.update;
+  const d = u.device;
+  const busy = u.task !== 'idle';
+  const flashing = u.task === 'flashing';
+
+  // Step 1: identify the bootloader
+  $('svs-check-btn').disabled = busy || svsStaging || !s.connected;
+  $('svs-boot-row').hidden = !d.checked;
+  let bootStatus;
+  if (!d.compatible) {
+    bootStatus = `<span class="bad">${esc(d.problem)}</span>`;
+  } else if (d.vector && !d.vector_verified) {
+    bootStatus = '<span class="warn">Vector bootloader — preview required before flashing</span>';
+  } else if (d.vector) {
+    bootStatus = '<span class="ok">Vector patch verified — safe to flash</span>';
+  } else {
+    bootStatus = '<span class="ok">Can be updated</span>';
+  }
+  $('svs-boot').innerHTML = `${esc(d.summary)}<br>` + bootStatus;
+
+  // Vector patch preview (only for a compatible vector bootloader)
+  $('svs-vector').hidden = !(d.checked && d.compatible && d.vector);
+  $('svs-preview-btn').disabled = busy || !s.connected;
+  $('svs-preview-btn').textContent = d.vector_verified ? 'Re-check vector patch' : 'Preview vector patch';
+
+  // Diagnostics: offered when the bootloader did not answer
+  const noAnswer = u.result_of === 'checking' && !u.result_ok && !d.checked;
+  $('svs-probe').hidden = !(noAnswer || u.task === 'probing' || u.result_of === 'probing');
+  $('svs-probe-btn').disabled = busy || !s.connected;
+  if (!s.connected && !busy) {
+    setMsg($('svs-check-msg'), 'The SVS is not connected', 'bad');
+  } else if (u.task === 'checking' || u.task === 'probing' || u.task === 'previewing') {
+    setMsg($('svs-check-msg'), u.phase + '…');
+  } else if (u.result_of === 'probing') {
+    setMsg($('svs-check-msg'), u.result, 'muted');
+  } else if (u.result_of === 'previewing') {
+    setMsg($('svs-check-msg'), u.result, u.result_ok ? 'ok' : 'bad');
+  } else if (u.result_of === 'checking' && !u.result_ok && !d.checked) {
+    setMsg($('svs-check-msg'), u.result, 'bad');  // no answer from the bootloader
+  } else if (u.result_of === 'checking') {
+    setMsg($('svs-check-msg'), d.compatible ? u.result : '', 'muted');
+  } else {
+    setMsg($('svs-check-msg'), '');
+  }
+
+  // Step 2: choose (only for an identified, compatible SVS)
+  $('svs-controls').hidden = !(d.checked && d.compatible);
+  for (const id of ['svs-rel', 'svs-file']) $(id).disabled = busy || svsStaging;
+
+  // While a new choice is being downloaded and checked, nothing is flashable
+  const img = u.image;
+  $('svs-staged').hidden = !img.staged || svsStaging;
+  $('svs-src').textContent = img.source;
+  $('svs-size').textContent = `${img.size.toLocaleString()} of ${d.app_space.toLocaleString()} bytes`;
+  $('svs-sha').textContent = img.sha256;
+
+  // Step 3: flash
+  $('svs-flash-btn').disabled = !u.can_flash || svsStaging;
+  $('svs-blocker').textContent = !busy && img.staged && !u.can_flash ? u.blocker : '';
+  const bar = $('svs-progress');
+  bar.hidden = !flashing;
+  bar.value = u.progress;
+  if (flashing) {
+    setMsg($('svs-msg'), `${u.phase}… do not unplug the SVS or the bridge.`);
+  } else if (u.result_of === 'flashing') {
+    setMsg($('svs-msg'), u.result, u.result_ok ? 'ok' : 'bad');
+  }
+}
+
+let svsTimer = null;
+async function refreshSvs() {
+  clearTimeout(svsTimer);
+  if ($('app').hidden) return;
+  try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
+  // Poll faster while checking or flashing
+  svsTimer = setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
+}
+
+// --- SVS serial log -----------------------------------------------------------
+
+let logAfter = 0;
+let logTimer = null;
+
+// Entries carry the bridge's uptime; turn it into this computer's clock
+function logTime(uptimeMs, nowMs) {
+  const d = new Date(Date.now() - (nowMs - uptimeMs));
+  return d.toLocaleTimeString([], {hour12: false}) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
+async function pollLog() {
+  clearTimeout(logTimer);
+  if ($('app').hidden) return;
+  let batchFull = false;
+  try {
+    const r = await api(`/device/svs/log?after=${logAfter}`);
+    const box = $('svs-log');
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+    if (r.entries.length) {
+      const empty = box.querySelector('.empty');
+      if (empty) empty.remove();
+    }
+    for (const e of r.entries) {
+      const line = document.createElement('div');
+      line.className = e.d === '>' ? 'tx' : e.d === '*' ? 'ev' : 'rx';
+      const arrow = e.d === '>' ? '→' : e.d === '*' ? '•' : '←';
+      line.innerHTML = `<span class="t">${logTime(e.t, r.now)}</span> ${arrow} ${esc(e.s)}`;
+      box.appendChild(line);
+      logAfter = e.seq;
+    }
+    while (box.childElementCount > 500) box.firstElementChild.remove();
+    if (atBottom) box.scrollTop = box.scrollHeight;
+    batchFull = r.entries.length >= 100;  // more waiting: fetch again right away
+  } catch (e) { /* busy, restarting or logged out */ }
+  logTimer = setTimeout(pollLog, batchFull ? 0 : 1000);
+}
+
+function clearLog() {
+  $('svs-log').innerHTML = '<div class="empty">Nothing yet</div>';
+}
+
+// (Re)starts from the bridge's whole history, e.g. after logging in again
+function startLog() {
+  logAfter = 0;
+  clearLog();
+  pollLog();
+}
+
+$('svs-log-clear').onclick = clearLog;
+
+$('svs-send-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const command = $('svs-cmd').value.trim();
+  if (!command) return;
+  try {
+    await post('/device/svs/send', {command});
+    setMsg($('svs-send-msg'), '');
+    $('svs-cmd').select();  // easy to send again or replace
+    pollLog();
+  } catch (err) {
+    setMsg($('svs-send-msg'), err.message, 'bad');
+  }
+};
+
+$('svs-send-toggle').onchange = async (e) => {
+  const on = e.target.checked;
+  if (on && !confirm('Allow the bridge to send commands and flash the SVS?\n\n' +
+                     "Disconnect the RetroTINK's HD-15 before sending — the SVS shares that " +
+                     'line and will not respond otherwise.')) {
+    e.target.checked = false;
+    return;
+  }
+  try {
+    renderSvs(await post('/device/svs/mode', {send: on}));
+  } catch (err) {
+    setMsg($('svs-restart-msg'), err.message, 'bad');
+    e.target.checked = !on;
+  }
+};
+
+$('svs-restart-btn').onclick = async () => {
+  if (!confirm('Restart the SVS? Video drops for a moment.')) return;
+  const msg = $('svs-restart-msg');
+  try {
+    await post('/device/svs/restart');
+    setMsg(msg, '');
+    setTimeout(refreshSvs, 3000);  // by then it has printed its banner
+  } catch (e) {
+    setMsg(msg, e.message, 'bad');
+  }
+};
+
+$('svs-preview-btn').onclick = async () => {
+  if (!confirm('Preview the vector patch? The SVS restarts (video drops for a moment). ' +
+               'Nothing is written.')) return;
+  try {
+    renderSvs(await post('/device/svs/preview'));
+    refreshSvs();
+  } catch (e) {
+    setMsg($('svs-check-msg'), e.message, 'bad');
+  }
+};
+
+$('svs-probe-btn').onclick = async () => {
+  if (!confirm('Run the bootloader diagnostics? The SVS restarts a few times over about ' +
+               '15 seconds. Nothing is written.')) return;
+  try {
+    renderSvs(await post('/device/svs/probe'));
+    refreshSvs();
+  } catch (e) {
+    setMsg($('svs-check-msg'), e.message, 'bad');
+  }
+};
+
+$('svs-check-btn').onclick = async () => {
+  if (!confirm('Restart the SVS to identify its bootloader? Video drops for a moment. ' +
+               'Nothing is written yet.')) return;
+  try {
+    renderSvs(await post('/device/svs/check'));
+    refreshSvs();
+  } catch (e) {
+    setMsg($('svs-check-msg'), e.message, 'bad');
+  }
+};
+
+// The releases are checked when the menu is opened (the bridge caches them
+// for a minute, as GitHub limits how often it may be asked)
+let releasesCheckedAt = 0;
+
+async function loadReleases() {
+  const sel = $('svs-rel');
+  const chosen = sel.value;
+  sel.innerHTML = '<option value="">Checking releases…</option>';
+  try {
+    const releases = await api('/device/svs/releases');
+    releasesCheckedAt = Date.now();
+    sel.innerHTML = '<option value="">Choose a version…</option>';
+    const latest = releases.find((r) => !r.beta);
+    for (const r of releases) {
+      const opt = document.createElement('option');
+      opt.value = r.name;
+      opt.textContent = r.version + (r === latest ? ' (latest)' : '');
+      sel.appendChild(opt);
+    }
+    if (!releases.length) sel.innerHTML = '<option value="">No releases found</option>';
+    sel.value = releases.some((r) => r.name === chosen) ? chosen : '';
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not check releases</option>';
+    if (e.status !== 401) setMsg($('svs-msg'), 'Could not check official releases: ' + e.message, 'bad');
+  }
+}
+
+function releasesStale() {
+  return Date.now() - releasesCheckedAt > 60000;
+}
+
+// Mouse: hold the menu until the list is in, then open it
+$('svs-rel').addEventListener('mousedown', async (e) => {
+  if (!releasesStale()) return;
+  e.preventDefault();
+  await loadReleases();
+  try { $('svs-rel').showPicker(); } catch (err) { $('svs-rel').focus(); }
+});
+
+// Keyboard: refresh when the menu gets focus
+$('svs-rel').addEventListener('focus', () => { if (releasesStale()) loadReleases(); });
+
+// Stages a firmware on the bridge. The details and Flash SVS only show up once
+// the bridge has checked it; on failure nothing stays staged.
+async function stageSvsFirmware(label, request) {
+  svsStaging = true;
+  if (svs) renderSvs(svs);
+  setMsg($('svs-msg'), label);
+  try {
+    const s = await request();
+    svsStaging = false;
+    setMsg($('svs-msg'), '');
+    renderSvs(s);
+  } catch (e) {
+    svsStaging = false;
+    setMsg($('svs-msg'), e.message, 'bad');
+    refreshSvs();
+  }
+}
+
+$('svs-rel').onchange = () => {
+  const name = $('svs-rel').value;
+  if (!name) return;
+  $('svs-file').value = '';
+  showFileName($('svs-file'));
+  stageSvsFirmware(`Downloading and checking ${name}…`,
+                   () => post('/device/svs/firmware/official', {name}));
+};
+
+$('svs-file').onchange = async () => {
+  const file = $('svs-file').files[0];
+  if (!file) return;
+  $('svs-rel').value = '';
+  const body = await file.text();
+  stageSvsFirmware(`Checking ${file.name}…`, () => api('/device/svs/firmware', {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain', 'X-File-Name': file.name.slice(0, 60)},
+    body,
+  }));
+};
+
+$('svs-flash-btn').onclick = async () => {
+  const img = svs.update.image;
+  if (!confirm(`Flash ${img.source} to the SVS?\n\nSHA-256 ${img.sha256}\n\n` +
+               'Do not unplug the SVS or the bridge until it finishes.')) return;
+  try {
+    renderSvs(await post('/device/svs/firmware/flash'));
+    refreshSvs();
+  } catch (e) {
+    setMsg($('svs-msg'), e.message, 'bad');
+  }
+};
+
+// --- WiFi -------------------------------------------------------------------
+
+function signalBars(rssi) {
+  const level = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  let svg = `<svg class="bars" viewBox="0 0 16 12" width="16" height="12"><title>${rssi} dBm</title>`;
+  for (let i = 0; i < 4; i++) {
+    const h = 3 + i * 3;
+    svg += `<rect x="${i * 4}" y="${12 - h}" width="3" height="${h}" rx="0.5" fill="currentColor"` +
+           ` opacity="${i < level ? 1 : 0.25}"/>`;
+  }
+  return svg + '</svg>';
+}
+
+// Network picker: type to filter the scanned networks, or enter a hidden
+// one by name. The scan button next to it refreshes the list. The first
+// opening scans; a 401 is handled by api() (back to the login form).
+function networkCombo(onPick) {
+  const input = $('ssid'), list = $('ssid-list'), scanBtn = $('scan-btn');
+  let nets = null, scanning = false, active = -1, shown = [];
+
+  function render() {
+    list.innerHTML = '';
+    if (scanning && !nets) {
+      list.innerHTML = '<li class="note">Scanning…</li>';
+      return;
+    }
+    const q = input.value.trim().toLowerCase();
+    shown = (nets || []).filter((n) => !q || n.ssid.toLowerCase().includes(q));
+    shown.forEach((n, i) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      if (i === active) li.className = 'active';
+      li.innerHTML = `<span class="name">${esc(n.ssid)}</span>${n.secure ? LOCK : ''}${signalBars(n.rssi)}`;
+      li.onclick = () => pick(n);
+      list.appendChild(li);
+    });
+    if (!shown.length) {
+      const note = q ? 'No match; it will be used as typed' : 'No networks found';
+      list.innerHTML = `<li class="note">${note}</li>`;
+    }
+  }
+
+  async function scan() {
+    scanning = true;
+    scanBtn.disabled = true;
+    scanBtn.classList.add('spin');
+    render();
+    try {
+      nets = await api('/device/scan');
+    } catch (e) {
+      nets = nets || [];
+      if (e.status !== 401) setMsg($('wifi-msg'), 'Scan failed: ' + e.message, 'bad');
+    }
+    scanning = false;
+    scanBtn.disabled = false;
+    scanBtn.classList.remove('spin');
+    active = -1;
+    if (!list.hidden) render();
+  }
+
+  function open() {
+    list.hidden = false;
+    if (!nets && !scanning) scan(); else render();
+  }
+  function close() { list.hidden = true; active = -1; }
+  function pick(n) { input.value = n.ssid; close(); onPick(n); }
+
+  // Keep focus in the input while using the list, so picking works
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  input.addEventListener('focus', open);
+  input.addEventListener('blur', close);
+  input.addEventListener('input', () => { active = -1; list.hidden = false; render(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      if (list.hidden) { open(); return; }
+      active = Math.min(active + 1, shown.length - 1);
+      render();
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+      active = Math.max(active - 1, 0);
+      render();
+      e.preventDefault();
+    } else if (e.key === 'Enter' && !list.hidden && active >= 0) {
+      pick(shown[active]);
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+  $('ssid-toggle').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (list.hidden) { input.focus(); open(); } else { close(); }
+  });
+  scanBtn.addEventListener('mousedown', (e) => e.preventDefault());  // keep the list open
+  scanBtn.onclick = scan;
+  return {scan};
+}
+
+networkCombo(() => $('password').focus());
+
+$('wifi-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const ssid = $('ssid').value.trim();
+  const msg = $('wifi-msg');
+  if (!ssid) { setMsg(msg, 'Enter a network name', 'bad'); return; }
+  $('wifi-btn').disabled = true;
+  setMsg(msg, 'Connecting to ' + ssid + '…');
+  try {
+    await post('/device/wifi', {ssid, password: $('password').value});
+    // Wait for the connection result
+    for (let i = 0; i < 20; i++) {
+      await sleep(1500);
+      await refresh();
+      if (status && status.wifi.connected && status.wifi.ssid === ssid) {
+        setMsg(msg, `Connected (${status.wifi.ip}). Open https://${status.wifi.hostname} ` +
+                    'from your home network.', 'ok');
+        $('wifi-btn').disabled = false;
+        return;
+      }
+    }
+    setMsg(msg, 'Could not connect. Check the password and try again.', 'bad');
+  } catch (e) {
+    setMsg(msg, 'Error: ' + e.message, 'bad');
+  }
+  $('wifi-btn').disabled = false;
+};
+
+// --- Bridge firmware --------------------------------------------------------
+
+// ESP-IDF app image layout: 24-byte image header (chip id at 12), 8-byte
+// segment header, then esp_app_desc_t (magic, version, project, time, date, idf)
+const ESP32S3_CHIP_ID = 9;
+const APP_DESC = 32;
+const APP_DESC_MAGIC = 0xABCD5432;
+
+function cString(bytes, offset, length) {
+  const b = bytes.subarray(offset, offset + length);
+  const end = b.indexOf(0);
+  return new TextDecoder().decode(end < 0 ? b : b.subarray(0, end));
+}
+
+// Reads the app description of a firmware file, or throws why it is not one
+async function readAppImage(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length < APP_DESC + 256 || bytes[0] !== 0xE9) throw new Error('Not an ESP-IDF firmware image');
+  const view = new DataView(bytes.buffer);
+  if (view.getUint32(APP_DESC, true) !== APP_DESC_MAGIC) throw new Error('Not an ESP-IDF firmware image');
+  if (view.getUint16(12, true) !== ESP32S3_CHIP_ID) throw new Error('This firmware is for a different chip');
+  const app = {
+    version: cString(bytes, APP_DESC + 16, 32),
+    project: cString(bytes, APP_DESC + 48, 32),
+    time: cString(bytes, APP_DESC + 80, 16),
+    date: cString(bytes, APP_DESC + 96, 16),
+    idf: cString(bytes, APP_DESC + 112, 32),
+    size: bytes.length,
+  };
+  if (status && app.project !== status.firmware.project) {
+    throw new Error(`This is a "${app.project}" firmware, not ${status.firmware.project}`);
+  }
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  app.sha256 = [...hash].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return app;
+}
+
+let fwImage = null;
+
+$('fw-file').onchange = async () => {
+  const file = $('fw-file').files[0];
+  fwImage = null;
+  $('fw-staged').hidden = true;
+  setMsg($('fw-msg'), '');
+  if (!file) return;
+  try {
+    fwImage = await readAppImage(file);
+  } catch (e) {
+    setMsg($('fw-msg'), e.message, 'bad');
+    return;
+  }
+  const current = status ? status.firmware.version : '?';
+  $('fw-version').textContent = `${fwImage.project} ${fwImage.version} (running ${current})`;
+  $('fw-built').textContent = `${fwImage.date} ${fwImage.time} · ESP-IDF ${fwImage.idf}`;
+  $('fw-size').textContent = fwImage.size.toLocaleString() + ' bytes';
+  $('fw-sha').textContent = fwImage.sha256;
+  $('fw-btn').disabled = false;
+  $('fw-staged').hidden = false;
+};
+
+$('fw-btn').onclick = () => {
+  const file = $('fw-file').files[0];
+  if (!file || !fwImage) return;
+  if (!confirm(`Update the bridge to ${fwImage.project} ${fwImage.version}?\n\n` +
+               `SHA-256 ${fwImage.sha256}`)) return;
+  const msg = $('fw-msg');
+  const bar = $('fw-progress');
+  const before = status ? status.firmware.partition : null;
+  $('fw-btn').disabled = true;
+  $('fw-file').disabled = true;
+  bar.hidden = false;
+  bar.value = 0;
+  setMsg(msg, 'Uploading…');
+
+  const done = (text) => {
+    setMsg(msg, text, 'bad');
+    $('fw-btn').disabled = false;
+    $('fw-file').disabled = false;
+    bar.hidden = true;
+  };
+  const started = Date.now();
+  const secs = (t) => Math.round((Date.now() - t) / 1000);
+  let uploaded = 0;
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/device/ota');
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    const pct = Math.floor(100 * e.loaded / e.total);
+    bar.value = pct;
+    setMsg(msg, `Uploading… ${pct}% (${secs(started)} s)`);
+  };
+  // The upload is done; the bridge now checks the whole image and switches to it
+  xhr.upload.onload = () => {
+    uploaded = Date.now();
+    bar.removeAttribute('value');  // indeterminate
+    setMsg(msg, `Uploaded in ${secs(started)} s. Verifying and installing…`);
+  };
+  xhr.onload = () => {
+    if (xhr.status === 401) { showAuth('login'); return; }
+    if (xhr.status !== 200) {
+      let text = xhr.responseText;
+      try { text = JSON.parse(text).error || text; } catch (e) { /* plain text */ }
+      done('Update failed: ' + (text || xhr.statusText));
+      return;
+    }
+    const installed = uploaded ? ` (upload ${Math.round((uploaded - started) / 1000)} s, ` +
+                                 `install ${secs(uploaded)} s)` : '';
+    setMsg(msg, 'Installed' + installed + '. Restarting…');
+    waitForReboot({partition: before, version: fwImage.version});
+  };
+  xhr.onerror = () => done('Upload failed (connection lost)');
+  xhr.send(file);
+};
+
+// Waits for the bridge to come back. After an update, the new firmware runs
+// from the other OTA slot; still running from the old slot means it failed
+// to start and was rolled back. The session is gone after a restart, so this
+// ends at the login form.
+async function waitForReboot(update, msg = $('fw-msg')) {
+  const base = msg.textContent.replace(/\s*(Restarting|Rebooting)….*$/, '');
+  const started = Date.now();
+  const limit = 120000;  // WiFi reconnection can take a while
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - started) / 1000);
+    setMsg(msg, `${base ? base + ' ' : ''}Restarting… ${s} s`);
+  }, 1000);
+  await sleep(4000);  // let it actually go down first
+  let s = null;
+  while (!s && Date.now() - started < limit) {
+    // Short timeout: while the bridge is down, a request can otherwise hang
+    // for a long time before the browser gives up
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), 3000);
+    try {
+      const res = await fetch('/api/status', {signal: abort.signal, cache: 'no-store'});
+      if (res.ok) s = await res.json();
+    } catch (e) { /* still restarting */ }
+    clearTimeout(timer);
+    if (!s) await sleep(1000);
+  }
+  clearInterval(tick);
+  if (s) {
+    // Reload so the page itself comes from the firmware now running (after
+    // an update it may differ); the outcome is shown at the login form
+    let note = {text: 'The bridge restarted. Log in again.', cls: 'ok'};
+    if (update && s.firmware.partition === update.partition) {
+      note = {text: `The new firmware did not start; the bridge went back to ` +
+                    `${s.firmware.version}. Log in again.`, cls: 'bad'};
+    } else if (update) {
+      note = {text: `The bridge now runs ${s.firmware.version}. Log in again.`, cls: 'ok'};
+    }
+    try { sessionStorage.setItem('loginNote', JSON.stringify(note)); } catch (e) { /* ignore */ }
+    location.reload();
+    return;
+  }
+  setMsg(msg, 'The bridge did not come back. Reload the page in a moment.', 'bad');
+}
+
+$('reboot-btn').onclick = async () => {
+  if (!confirm('Reboot the bridge?')) return;
+  try {
+    await post('/device/reboot');
+  } catch (e) {
+    setMsg($('device-msg'), e.message, 'bad');
+    return;
+  }
+  setMsg($('device-msg'), 'Rebooting…');
+  waitForReboot(null, $('device-msg'));
+};
+
+$('reset-btn').onclick = async () => {
+  if (!confirm('Erase all settings (WiFi, admin password and certificate) and restart in ' +
+               'setup mode?\n\nYou will need to set up the bridge again.')) return;
+  try {
+    await post('/device/factory-reset');
+  } catch (e) {
+    setMsg($('device-msg'), 'Factory reset failed: ' + e.message, 'bad');
+    return;
+  }
+  const ap = status ? status.wifi.ap_ssid : 'SVS-Bridge-XXXX';
+  setMsg($('device-msg'), `Reset done. Join the "${ap}" network to set up the bridge again.`, 'ok');
+  for (const b of document.querySelectorAll('button')) b.disabled = true;
+};
+
+// --- Init -------------------------------------------------------------------
+
+// Outcome of a restart that reloaded the page (see waitForReboot)
+try {
+  const note = JSON.parse(sessionStorage.getItem('loginNote') || 'null');
+  sessionStorage.removeItem('loginNote');
+  if (note) setMsg($('login-msg'), note.text, note.cls);
+} catch (e) { /* ignore */ }
+
+(async () => {
+  try {
+    const a = await api('/device/auth');
+    showAuth(a.authenticated ? 'app' : a.password_set ? 'login' : 'create');
+  } catch (e) {
+    showAuth('login');
+  }
+})();
+setInterval(() => { if (!$('app').hidden) refresh(); }, 5000);
+</script>
+</body>
+</html>

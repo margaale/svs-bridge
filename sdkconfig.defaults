@@ -1,0 +1,50 @@
+# ESP32-S3 N16R8: 16 MB flash (QIO) + 8 MB octal PSRAM
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+
+# Two OTA slots (6 MB each) + spare storage. See partitions.csv
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# If a new OTA image fails to boot and mark itself valid, roll back
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Console goes through the "COM" port (UART0 -> on-board USB-serial chip).
+# The native "USB" port (GPIO19/20) is left free for USB Host.
+CONFIG_ESP_CONSOLE_UART_DEFAULT=y
+CONFIG_ESP_CONSOLE_SECONDARY_NONE=y
+
+# The VCP driver (CH34x) is C++ and uses exceptions
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
+
+CONFIG_FREERTOS_HZ=1000
+
+# Room for certificate generation on first boot (runs in app_main)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# HTTPS server with a self-signed certificate generated on the device
+CONFIG_ESP_HTTPS_SERVER_ENABLE=y
+CONFIG_MBEDTLS_X509_CREATE_C=y
+CONFIG_MBEDTLS_X509_CRT_WRITE_C=y
+
+# HTTPS (4 connections) + HTTP (3) + their control and listen sockets + DNS + mDNS
+CONFIG_LWIP_MAX_SOCKETS=16
+
+# TLS buffers (~40 KB per connection) go to PSRAM
+CONFIG_SPIRAM_USE_MALLOC=y
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+
+# Throughput for uploads (OTA): the defaults suit chips without PSRAM and keep
+# the TCP window at 5.7 KB. These follow Espressif's iperf example for ESP32-S3.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=16
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=64
+CONFIG_ESP_WIFI_RX_BA_WIN=32
+CONFIG_LWIP_TCP_SND_BUF_DEFAULT=65534
+CONFIG_LWIP_TCP_WND_DEFAULT=65534
+CONFIG_LWIP_TCP_RECVMBOX_SIZE=64
+CONFIG_LWIP_TCPIP_RECVMBOX_SIZE=64

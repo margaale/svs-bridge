@@ -1,0 +1,9 @@
+build/
+managed_components/
+sdkconfig
+sdkconfig.old
+
+# Local-only tooling and editor config (machine-specific paths)
+.vscode/
+.claude/
+eim_config.toml

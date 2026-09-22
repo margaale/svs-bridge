@@ -1,0 +1,97 @@
+menu "SVS Bridge"
+
+    menu "SVS serial link"
+
+        config SVS_BAUDRATE
+            int "SVS baud rate"
+            default 9600
+            help
+                The SVS (CH340) uses 9600 8N1.
+
+        config SVS_ASSERT_DTR
+            bool "Assert DTR when opening the port"
+            default n
+            help
+                On Arduino-style boards with a CH340, asserting DTR may reset the
+                microcontroller. Disabled by default.
+
+        choice SVS_EOL
+            prompt "Line ending for sent commands"
+            default SVS_EOL_CRLF
+            help
+                The official SVS Management Utility ends commands with CR LF.
+
+            config SVS_EOL_NONE
+                bool "None"
+            config SVS_EOL_LF
+                bool "LF (\\n)"
+            config SVS_EOL_CR
+                bool "CR (\\r)"
+            config SVS_EOL_CRLF
+                bool "CRLF (\\r\\n)"
+        endchoice
+
+        config SVS_HEX_DUMP
+            bool "Show received data as hex"
+            default n
+            help
+                When disabled, received data is shown as text, one line at a time,
+                and non-printable bytes appear as <XX>.
+
+    endmenu
+
+    menu "Network"
+
+        config SVS_HOSTNAME
+            string "Hostname"
+            default "svs-bridge"
+            help
+                Network name of the bridge. It is reachable as <hostname>.local
+                through mDNS, and the self-signed certificate is issued for it.
+                Changing it later requires a new certificate.
+
+        config SVS_AP_PASSWORD
+            string "Setup access point password"
+            default ""
+            help
+                Password of the setup access point ("SVS-Bridge-XXXX") that comes
+                up when the bridge has no working WiFi connection. Leave empty
+                for an open network; otherwise use at least 8 characters.
+
+    endmenu
+
+    menu "Firmware updates"
+
+        config SVS_OTA_CONFIRM_TIMEOUT
+            int "Seconds a new firmware has to connect to WiFi"
+            default 300
+            range 60 3600
+            help
+                After an OTA update, the new firmware is kept only once it
+                connects to the WiFi network. If it does not within this time,
+                the bridge goes back to the previous firmware, so a bad update
+                cannot leave a remote bridge unreachable.
+
+    endmenu
+
+    menu "Factory reset button"
+
+        config SVS_RESET_BUTTON_GPIO
+            int "Button GPIO"
+            default 0
+            help
+                GPIO of the button that triggers a factory reset when held. The
+                default is the BOOT button of ESP32-S3 dev boards. The button
+                must pull the pin low when pressed.
+
+        config SVS_RESET_HOLD_SECONDS
+            int "Hold time (seconds)"
+            default 10
+            range 3 60
+            help
+                How long the button must be held, while the bridge is running,
+                to erase all settings and reboot into setup mode.
+
+    endmenu
+
+endmenu
