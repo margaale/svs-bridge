@@ -20,6 +20,8 @@
 //   GET  /device/cert             [admin] server certificate (PEM)
 //   POST /device/wifi             [admin] {"ssid", "password"}
 //   POST /device/ota              [admin] raw firmware image (build/svs_bridge.bin)
+//   GET  /device/releases         [admin] the bridge's own GitHub releases (JSON)
+//   POST /device/ota/github       [admin] {"tag"}: download that release and update
 //   POST /device/reboot           [admin]
 //   POST /device/factory-reset    [admin] erase all settings, reboot into setup mode
 //   GET  /device/svs              [admin] SVS banner info and firmware update state
