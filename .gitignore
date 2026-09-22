@@ -10,3 +10,6 @@ eim_config.toml
 
 # Version comes from git/GitVersion in CI (written transiently before the build)
 version.txt
+
+# Python bytecode (host tests, dev server)
+__pycache__/
