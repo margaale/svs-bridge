@@ -518,23 +518,27 @@ static esp_err_t releases_get(httpd_req_t *req)
 }
 
 // Opens `url`, following up to 5 redirects (GitHub asset URLs redirect to a
-// CDN). On success returns the ready-to-read client via *out; caller closes it.
+// CDN). Uses one client and esp_http_client_set_redirection(), which applies
+// the Location the client stored internally on a 3xx — esp_http_client_get_header
+// only returns request headers, not the response's. On success returns the
+// ready-to-read client via *out; caller closes and frees it.
 static esp_err_t open_following_redirects(const std::string &url, esp_http_client_handle_t *out,
                                           std::string &err)
 {
-    std::string cur = url;
-    for (int hop = 0; hop < 5; hop++) {
-        esp_http_client_config_t config = {};
-        config.url = cur.c_str();
-        config.crt_bundle_attach = esp_crt_bundle_attach;
-        config.timeout_ms = 20000;
-        config.buffer_size = 4096;
-        config.user_agent = "svs-bridge";
-        esp_http_client_handle_t client = esp_http_client_init(&config);
-        if (client == nullptr) {
-            err = "Out of memory";
-            return ESP_ERR_NO_MEM;
-        }
+    esp_http_client_config_t config = {};
+    config.url = url.c_str();
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+    config.timeout_ms = 20000;
+    config.buffer_size = 4096;
+    config.user_agent = "svs-bridge";
+    config.max_redirection_count = 5;
+    esp_http_client_handle_t client = esp_http_client_init(&config);
+    if (client == nullptr) {
+        err = "Out of memory";
+        return ESP_ERR_NO_MEM;
+    }
+
+    for (int hop = 0; hop < 6; hop++) {
         if (esp_http_client_open(client, 0) != ESP_OK) {
             esp_http_client_cleanup(client);
             err = "Could not reach GitHub";
@@ -543,17 +547,9 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
         esp_http_client_fetch_headers(client);
         int status = esp_http_client_get_status_code(client);
         if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308) {
-            char *loc = nullptr;
-            if (esp_http_client_get_header(client, "Location", &loc) == ESP_OK && loc != nullptr) {
-                cur = loc;  // copied before cleanup frees the header
-                esp_http_client_close(client);
-                esp_http_client_cleanup(client);
-                continue;
-            }
-            esp_http_client_close(client);
-            esp_http_client_cleanup(client);
-            err = "Redirect without a location";
-            return ESP_FAIL;
+            esp_http_client_set_redirection(client);  // point the client at the Location
+            esp_http_client_close(client);            // before re-opening the same client
+            continue;
         }
         if (status != 200) {
             esp_http_client_close(client);
@@ -566,6 +562,7 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
         *out = client;
         return ESP_OK;
     }
+    esp_http_client_cleanup(client);
     err = "Too many redirects";
     return ESP_FAIL;
 }
