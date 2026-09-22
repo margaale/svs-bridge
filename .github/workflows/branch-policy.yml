@@ -1,0 +1,19 @@
+name: Branch policy
+
+# master only ever integrates from develop. Feature/hotfix branches go through
+# develop first. (The merge method itself — merge commit for develop<->master,
+# squash for features — is a convention GitHub cannot enforce per source branch.)
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  source-branch:
+    name: source branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: master only accepts PRs from develop
+        if: github.head_ref != 'develop'
+        run: |
+          echo "::error::PRs into master must come from develop (this one is from '${{ github.head_ref }}')."
+          exit 1
