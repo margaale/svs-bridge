@@ -7,3 +7,6 @@ sdkconfig.old
 .vscode/
 .claude/
 eim_config.toml
+
+# Version comes from git/GitVersion in CI (written transiently before the build)
+version.txt

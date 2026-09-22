@@ -126,6 +126,21 @@ idf.py -p COMx flash monitor
 Options live under `idf.py menuconfig` → **SVS Bridge** (serial settings,
 hostname, setup network password).
 
+## Tests and CI
+
+The pure logic that must never regress — the AVR reset-vector patch, the Intel
+HEX decoder and the SVS line parsing — lives in dependency-free headers
+(`main/svs_vectors.h`, `main/svs_hex.h`, `main/svs_protocol.h`) and is
+unit-tested on the host, with no ESP-IDF or hardware:
+
+```
+g++ -std=c++17 -Wall -Wextra -Imain -o t test/host/test_svs_vectors.cpp && ./t
+```
+
+GitHub Actions builds the firmware in the ESP-IDF v6.1 container and runs these
+tests on every push. Pushing a `vX.Y.Z` tag builds and attaches the binaries
+(including the OTA image `svs_bridge.bin`) to a GitHub release.
+
 ## Flash layout
 
 Two 6 MB OTA app slots plus a spare storage partition (see `partitions.csv`).

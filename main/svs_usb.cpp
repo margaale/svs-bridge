@@ -4,6 +4,7 @@
 // the SVS. Everything the SVS sends is printed on the console.
 
 #include "svs_usb.h"
+#include "svs_protocol.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,8 @@
 using namespace esp_usb;
 
 namespace svs_usb {
+
+using namespace svs_protocol;  // parse_svs_line, only_control_chars, StatusFilter, ...
 
 static const char *TAG = "svs_usb";
 
@@ -189,62 +192,17 @@ static void usb_lib_task(void *arg)
     }
 }
 
-// True if the line only holds control characters, shown as <XX> (the SVS
-// sends a lone 0x1A after its version, which the official utility strips)
-static bool only_control_chars(const std::string &line)
-{
-    for (size_t i = 0; i < line.size();) {
-        if (line[i] == '<' && i + 3 < line.size() && line[i + 3] == '>') {
-            i += 4;
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
-
-// The SVS repeats "SVS TOTAL INPUTS=n" and "SVS CURRENT INPUT=n" every 2 s.
-// The web log keeps them only when their value changes, so they do not push
-// everything else out of it; the console still shows every line.
-static bool is_repeated_status(const std::string &line)
-{
-    static std::string last_total, last_current;
-    if (line.rfind("SVS_FW_", 0) == 0) {  // the SVS restarted: log them once again
-        last_total.clear();
-        last_current.clear();
-        return false;
-    }
-    std::string *last = line.rfind("SVS TOTAL", 0) == 0     ? &last_total
-                        : line.rfind("SVS CURRENT", 0) == 0 ? &last_current
-                                                            : nullptr;
-    if (last == nullptr) {
-        return false;
-    }
-    if (*last == line) {
-        return true;
-    }
-    *last = line;
-    return false;
-}
+// only_control_chars, is_repeated_status (as StatusFilter) and trailing_number
+// live in svs_protocol.h so they can be unit-tested on the host.
+static StatusFilter s_status_filter;
 
 static void print_line(std::string &line)
 {
     printf("%8lld ms  SVS > %s\n", now_ms(), line.c_str());
-    if (!only_control_chars(line) && !is_repeated_status(line)) {
+    if (!only_control_chars(line) && !s_status_filter.is_repeated(line)) {
         log_add('<', line);
     }
     line.clear();
-}
-
-static int trailing_number(const std::string &line)
-{
-    size_t end = line.find_last_of("0123456789");
-    if (end == std::string::npos) {
-        return -1;
-    }
-    size_t start = line.find_last_not_of("0123456789", end);
-    start = start == std::string::npos ? 0 : start + 1;
-    return atoi(line.substr(start, end - start + 1).c_str());
 }
 
 // Last known SVS info, so a restarting bridge does not need to restart the SVS
@@ -288,25 +246,31 @@ static void save_info(const Info &info)
 // Picks the banner and input change lines out of what the SVS sends
 static void parse_line(const std::string &line)
 {
+    ParsedLine p = parse_svs_line(line);
+    if (p.kind == LineKind::None) {
+        return;
+    }
     bool changed = false;
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
-    if (line.rfind("SVS_FW_", 0) == 0) {
+    switch (p.kind) {
+    case LineKind::Firmware:
         changed = s_info.firmware != line || !s_info.live;
         s_info.firmware = line;
         s_info.live = true;
         s_info.boots_seen++;
-    } else if (line.rfind("SVS CURRENT", 0) == 0 || line.rfind("SVS NEW", 0) == 0) {
-        // "SVS NEW ..." follows every input change (the official utility
-        // reads the new input from it)
-        int n = trailing_number(line);
-        changed = s_info.current_input != n;
-        s_info.current_input = n;
+        break;
+    case LineKind::InputChange:
+        changed = s_info.current_input != p.value;
+        s_info.current_input = p.value;
         s_info.inputs_live = true;
-    } else if (line.rfind("SVS TOTAL", 0) == 0) {
-        int n = trailing_number(line);
-        changed = s_info.total_inputs != n;
-        s_info.total_inputs = n;
+        break;
+    case LineKind::TotalInputs:
+        changed = s_info.total_inputs != p.value;
+        s_info.total_inputs = p.value;
         s_info.inputs_live = true;
+        break;
+    case LineKind::None:
+        break;  // handled above
     }
     Info copy = s_info;
     xSemaphoreGive(s_dev_mutex);

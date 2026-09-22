@@ -1,0 +1,22 @@
+name: Unit tests
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  host-tests:
+    name: Host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and run
+        run: |
+          set -e
+          for t in svs_vectors svs_hex svs_protocol; do
+            echo "== $t =="
+            g++ -std=c++17 -Wall -Wextra -Werror -Imain -o "test_$t" "test/host/test_$t.cpp"
+            "./test_$t"
+          done

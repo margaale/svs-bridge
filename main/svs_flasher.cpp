@@ -12,8 +12,12 @@
 #include "psa/crypto.h"
 
 #include "svs_usb.h"
+#include "svs_hex.h"
+#include "svs_vectors.h"
 
 namespace svs_flasher {
+
+using namespace svs_vectors;  // buf2u32, is_jmp, patch_vectors, VEC_SZ, ...
 
 static const char *TAG = "svs_flasher";
 
@@ -128,133 +132,10 @@ static std::string wait_for_banner(uint32_t boots_before)
 // Intel HEX
 // ---------------------------------------------------------------------------
 
-static int hex_nibble(char c)
-{
-    if (c >= '0' && c <= '9') return c - '0';
-    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
-    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
-    return -1;
-}
-
-// Decodes an Intel HEX file into a flash image, checking every record
-static bool decode_hex(const char *hex, size_t len, std::vector<uint8_t> &image, std::string *error)
-{
-    std::vector<uint8_t> flash(FLASH_SIZE, 0xFF);
-    size_t top = 0;  // one past the highest written address
-    uint32_t base = 0;
-    bool eof = false;
-    int line_no = 0;
-    size_t pos = 0;
-    char msg[96];
-
-    while (pos < len && !eof) {
-        size_t end = pos;
-        while (end < len && hex[end] != '\n') {
-            end++;
-        }
-        const char *line = hex + pos;
-        size_t n = end - pos;
-        pos = end + 1;
-        line_no++;
-        while (n > 0 && (line[n - 1] == '\r' || line[n - 1] == ' ' || line[n - 1] == '\t')) {
-            n--;
-        }
-        if (n == 0) {
-            continue;
-        }
-
-        if (line[0] != ':' || n < 11 || (n - 1) % 2 != 0) {
-            snprintf(msg, sizeof(msg), "Line %d is not a valid Intel HEX record", line_no);
-            *error = msg;
-            return false;
-        }
-        uint8_t rec[260];
-        size_t rec_len = (n - 1) / 2;
-        if (rec_len > sizeof(rec)) {
-            snprintf(msg, sizeof(msg), "Line %d is too long", line_no);
-            *error = msg;
-            return false;
-        }
-        uint8_t sum = 0;
-        for (size_t i = 0; i < rec_len; i++) {
-            int hi = hex_nibble(line[1 + 2 * i]);
-            int lo = hex_nibble(line[2 + 2 * i]);
-            if (hi < 0 || lo < 0) {
-                snprintf(msg, sizeof(msg), "Line %d has invalid characters", line_no);
-                *error = msg;
-                return false;
-            }
-            rec[i] = (uint8_t)(hi << 4 | lo);
-            sum += rec[i];
-        }
-        uint8_t count = rec[0];
-        if (rec_len != (size_t)count + 5) {
-            snprintf(msg, sizeof(msg), "Line %d has a wrong length", line_no);
-            *error = msg;
-            return false;
-        }
-        if (sum != 0) {
-            snprintf(msg, sizeof(msg), "Line %d has a wrong checksum (corrupted file?)", line_no);
-            *error = msg;
-            return false;
-        }
-        uint16_t addr = (uint16_t)(rec[1] << 8 | rec[2]);
-        uint8_t type = rec[3];
-        const uint8_t *data = rec + 4;
-
-        bool address_record = type == 0x02 || type == 0x04;
-        if (address_record && count != 2) {
-            snprintf(msg, sizeof(msg), "Line %d has a malformed address record", line_no);
-            *error = msg;
-            return false;
-        }
-
-        switch (type) {
-        case 0x00: {  // data
-            uint32_t start = base + addr;
-            if (start + count > FLASH_SIZE) {
-                snprintf(msg, sizeof(msg), "Line %d writes past the ATmega328P flash (0x%05X)",
-                         line_no, (unsigned)(start + count));
-                *error = msg;
-                return false;
-            }
-            memcpy(&flash[start], data, count);
-            if (start + count > top) {
-                top = start + count;
-            }
-            break;
-        }
-        case 0x01:  // end of file
-            eof = true;
-            break;
-        case 0x02:  // extended segment address
-            base = (uint32_t)(data[0] << 8 | data[1]) << 4;
-            break;
-        case 0x04:  // extended linear address
-            base = (uint32_t)(data[0] << 8 | data[1]) << 16;
-            break;
-        case 0x03:  // start segment address
-        case 0x05:  // start linear address: irrelevant for flashing
-            break;
-        default:
-            snprintf(msg, sizeof(msg), "Line %d has an unsupported record (type 0x%02X)", line_no, type);
-            *error = msg;
-            return false;
-        }
-    }
-
-    if (!eof) {
-        *error = "The file has no end record (truncated?)";
-        return false;
-    }
-    if (top == 0) {
-        *error = "The file contains no data";
-        return false;
-    }
-    flash.resize(top);
-    image.swap(flash);
-    return true;
-}
+// Intel HEX decoding lives in svs_hex.h (dependency-free, unit-tested on the
+// host; see test/host/test_svs_hex.cpp). decode_hex() is called below with
+// FLASH_SIZE as the maximum image size.
+using svs_hex::decode_hex;
 
 static std::string sha256_hex(const std::vector<uint8_t> &data)
 {
@@ -448,121 +329,10 @@ static void read_boot_info(BootInfo &bi)
 // ---------------------------------------------------------------------------
 // AVR reset-vector patching (ported from avrdude's urclock.c)
 //
-// The ATmega328P has 32 KB flash (> 8 KB), so its interrupt vectors are 4-byte
-// jmp instructions (vecsz 4). urboot's reset-vector protection still writes a
-// 2-byte rjmp to the bootloader followed by a 2-byte "ur" marker, because a
-// backward rjmp reaches a bootloader at the top of this power-of-two flash.
-// These mirror avrdude exactly so the patch is identical to the official tool's.
+// The pure opcode/patch math lives in svs_vectors.h (brought into scope with
+// the `using namespace svs_vectors` above) so it can be unit-tested on the host
+// without ESP-IDF. See test/host/test_svs_vectors.cpp.
 // ---------------------------------------------------------------------------
-
-static const int VEC_SZ = 4;  // ATmega328P uses 4-byte jmp vectors
-
-static uint32_t buf2u32(const uint8_t *b) { return b[0] | b[1] << 8 | b[2] << 16 | (uint32_t)b[3] << 24; }
-
-static void u32tobuf(uint8_t *b, uint32_t v)
-{
-    b[0] = v; b[1] = v >> 8; b[2] = v >> 16; b[3] = v >> 24;
-}
-
-static bool is_rjmp(uint16_t op) { return (op & 0xF000) == 0xC000; }
-static bool is_jmp(uint16_t op) { return (op & 0xFE0E) == 0x940C; }
-
-static int rjmp_dist_wrap(int dist, int flashsize)
-{
-    int size = flashsize > 8182 ? 8192 : flashsize;
-    if ((size & (size - 1)) == 0) {  // power of two
-        dist &= size - 1;
-        if (dist >= size / 2) {
-            dist -= size;
-        }
-    }
-    return dist;
-}
-
-// Byte address an rjmp at address 0 (the reset) jumps to
-static int rjmp_reset_target(uint16_t op, int flashsize)
-{
-    int16_t dist = op & 0x0FFF;
-    dist = (int16_t)(dist << 4) >> 3;  // sign-extend 12 bits and multiply by 2
-    int addr = rjmp_dist_wrap(dist + 2, flashsize);
-    while (addr < 0) addr += flashsize;
-    while (addr > flashsize) addr -= flashsize;
-    return addr;
-}
-
-// Byte address a 4-byte jmp opcode targets
-static int jmp_target(const uint8_t *b)
-{
-    uint32_t op = buf2u32(b);
-    int addr = op >> 16;
-    addr |= (op & 1) << 16;
-    addr |= (op & 0x1F0) << (17 - 4);
-    return addr << 1;
-}
-
-// 4-byte jmp opcode to a byte address
-static uint32_t jmp_opcode(int32_t addr)
-{
-    return (((addr >> 1) & 0xFFFF) << 16) | 0x940C | (((addr >> 18) & 31) << 4) | ((addr >> 17) & 1);
-}
-
-// Reset rjmp that reaches the bootloader (urboot's own formula)
-static uint16_t rjmp_to_bootloader(int blstart, int flashsize)
-{
-    return 0xC000 | ((uint16_t)((blstart - flashsize - 2) / 2) & 0x0FFF);
-}
-
-// Patches a flash image so the reset vector points at the bootloader and the
-// application's real entry is preserved in the bootloader's chosen vector,
-// exactly as avrdude does for this urboot: it writes ONLY the 2-byte rjmp over
-// the first word of the reset and leaves the second word (image[2..3]) as it
-// came from the .hex — the low word of the original reset jmp, i.e. the app
-// address. Confirmed against the SVS: a firmware whose reset is `jmp 0x1A6`
-// (0C 94 D3 00) ends up on the chip as 7F CF D3 00. Returns false (and *error)
-// without touching the image if the reset opcode is not a jmp/rjmp or the app
-// entry is out of range. reset_rjmp is the 2 bytes written over the reset word.
-static bool patch_vectors(std::vector<uint8_t> &image, int blstart, int vector_num,
-                          uint16_t &reset_rjmp, int &app_start, std::string *error)
-{
-    char m[96];
-    int app_vec_loc = vector_num * VEC_SZ;
-    if (image.size() < (size_t)app_vec_loc + VEC_SZ) {
-        *error = "Image too small to patch";
-        return false;
-    }
-    uint16_t reset_op16 = (uint16_t)(image[0] | image[1] << 8);
-    if (is_jmp(reset_op16)) {
-        app_start = jmp_target(&image[0]);
-    } else if (is_rjmp(reset_op16)) {
-        app_start = rjmp_reset_target(reset_op16, FLASH_SIZE);
-    } else {
-        snprintf(m, sizeof(m), "Reset word 0x%04X is not a jmp or rjmp; not patching", reset_op16);
-        *error = m;
-        return false;
-    }
-
-    reset_rjmp = rjmp_to_bootloader(blstart, FLASH_SIZE);
-    if (app_start == blstart) {
-        return true;  // already patched (a fresh .hex should not be)
-    }
-    if (app_start < app_vec_loc || app_start >= (int)image.size()) {
-        snprintf(m, sizeof(m), "App start 0x%04X out of range [0x%04X, 0x%04X); not patching",
-                 app_start, app_vec_loc, (unsigned)image.size());
-        *error = m;
-        return false;
-    }
-
-    image[0] = reset_rjmp & 0xFF;                          // reset word -> rjmp to bootloader
-    image[1] = reset_rjmp >> 8;                            // image[2..3] left as-is (avrdude does too)
-    u32tobuf(&image[app_vec_loc], jmp_opcode(app_start));  // moved-away vector -> app start
-
-    // The patched reset must decode back to the bootloader, or do not proceed
-    if (rjmp_reset_target(reset_rjmp, FLASH_SIZE) != blstart) {
-        *error = "Internal check failed: patched reset does not reach the bootloader";
-        return false;
-    }
-    return true;
-}
 
 static bool same_bootloader(const BootInfo &a, const BootInfo &b)
 {
@@ -801,7 +571,7 @@ static void flash_task(void *arg)
         uint16_t reset_rjmp;
         int app_start;
         std::string perr;
-        if (!patch_vectors(image, (int)app_space, vector_num, reset_rjmp, app_start, &perr)) {
+        if (!patch_vectors(image, (int)app_space, vector_num, FLASH_SIZE, reset_rjmp, app_start, &perr)) {
             error = perr + ". Nothing was written.";
         } else {
             char note[150];
@@ -1052,7 +822,7 @@ esp_err_t stage_hex(const char *hex, size_t len, const std::string &source, std:
         return ESP_ERR_INVALID_STATE;
     }
     std::vector<uint8_t> image;
-    if (!decode_hex(hex, len, image, error)) {
+    if (!decode_hex(hex, len, image, FLASH_SIZE, error)) {
         clear();
         return ESP_ERR_INVALID_ARG;
     }

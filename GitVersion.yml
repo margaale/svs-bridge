@@ -1,0 +1,13 @@
+# GitVersion computes the firmware version from git history (GitFlow):
+#   master  -> x.y.z            (stable, auto-incrementing patch per merge)
+#   develop -> x.y.z-alpha.N    (prerelease)
+# Bump minor/major with a "+semver: minor" / "+semver: major" commit message.
+# The `main` branch config also matches `master`.
+workflow: GitFlow/v1
+next-version: 0.1.0
+branches:
+  main:
+    deployment-mode: ContinuousDeployment
+  develop:
+    deployment-mode: ContinuousDeployment
+    label: alpha

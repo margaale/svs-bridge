@@ -1,0 +1,45 @@
+name: Build
+
+# Compile gate for pull requests. Pushes to develop/master build and publish in
+# release.yml instead, so this does not double-build them.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # GitVersion needs the full history
+
+      - name: Install GitVersion
+        uses: gittools/actions/gitversion/setup@v3
+        with:
+          versionSpec: '6.x'
+      - name: Determine version
+        id: gitversion
+        uses: gittools/actions/gitversion/execute@v3
+
+      # ESP-IDF reads version.txt for the app version; written here, never committed.
+      - name: Set firmware version
+        run: echo "${{ steps.gitversion.outputs.semVer }}" > version.txt
+
+      - name: Build firmware
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v6.1
+          target: esp32s3
+          path: '.'
+
+      - name: Upload firmware binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: svs-bridge-firmware
+          path: |
+            build/svs_bridge.bin
+            build/bootloader/bootloader.bin
+            build/partition_table/partition-table.bin
+            build/ota_data_initial.bin
+          if-no-files-found: error
