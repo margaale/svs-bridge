@@ -6,13 +6,10 @@
 #include <memory>
 #include <functional>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_http_server.h"
 #include "esp_https_server.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
@@ -370,7 +367,8 @@ static esp_err_t wifi_post(httpd_req_t *req)
 // the full checksum. On success the boot partition is switched (caller reboots).
 // Returns ESP_OK, or sets *err_msg and returns a failure code.
 static esp_err_t ota_apply(size_t total, const std::function<int(uint8_t *, size_t)> &read,
-                           std::string &err_msg)
+                           std::string &err_msg,
+                           const std::function<void(size_t, size_t)> *progress = nullptr)
 {
     const esp_partition_t *target = esp_ota_get_next_update_partition(NULL);
     if (target == nullptr) {
@@ -455,6 +453,9 @@ static esp_err_t ota_apply(size_t total, const std::function<int(uint8_t *, size
                 return err;
             }
             filled = 0;
+            if (progress && *progress) {
+                (*progress)(total - remaining, total);
+            }
         }
     }
 
@@ -523,11 +524,10 @@ static esp_err_t releases_get(httpd_req_t *req)
     return send_json(req, doc);
 }
 
-// Opens `url`, following up to 5 redirects (GitHub asset URLs redirect to a
-// CDN). Uses one client and esp_http_client_set_redirection(), which applies
-// the Location the client stored internally on a 3xx — esp_http_client_get_header
-// only returns request headers, not the response's. On success returns the
-// ready-to-read client via *out; caller closes and frees it.
+// Opens `url`, following redirects (GitHub's asset URL 302-redirects to its CDN
+// on another host, with a very long signed URL). The only change needed over a
+// plain client is a bigger tx buffer for that long request line. On success
+// returns a client positioned at the 200 response via *out (caller closes it).
 static esp_err_t open_following_redirects(const std::string &url, esp_http_client_handle_t *out,
                                           std::string &err)
 {
@@ -535,7 +535,8 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
     config.url = url.c_str();
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.timeout_ms = 20000;
-    config.buffer_size = 2048;
+    config.buffer_size = 4096;
+    config.buffer_size_tx = 4096;  // the signed CDN URL makes a long request line
     config.user_agent = "svs-bridge";
     config.max_redirection_count = 5;
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -545,27 +546,13 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
     }
 
     for (int hop = 0; hop < 6; hop++) {
-        // Opening the TLS connection can fail transiently (e.g. under heap
-        // pressure while the HTTPS server also holds a session); retry, and on
-        // giving up report the exact error and the internal heap so the cause
-        // is visible without a serial console.
-        esp_err_t oe = ESP_FAIL;
-        for (int attempt = 0; attempt < 3 && oe != ESP_OK; attempt++) {
-            oe = esp_http_client_open(client, 0);
-            if (oe != ESP_OK) {
-                vTaskDelay(pdMS_TO_TICKS(400));
-            }
-        }
-        if (oe != ESP_OK) {
-            char msg[128];
-            snprintf(msg, sizeof(msg),
-                     "Could not reach GitHub (%s; internal heap %u B, largest block %u B)",
-                     esp_err_to_name(oe),
-                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
-                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        if (esp_http_client_open(client, 0) != ESP_OK) {
+            char msg[64];
+            snprintf(msg, sizeof(msg), "Could not reach GitHub (hop %d, errno %d)", hop,
+                     esp_http_client_get_errno(client));
             err = msg;
             esp_http_client_cleanup(client);
-            return oe;
+            return ESP_FAIL;
         }
         esp_http_client_fetch_headers(client);
         int status = esp_http_client_get_status_code(client);
@@ -613,19 +600,42 @@ static esp_err_t ota_github_post(httpd_req_t *req)
 
     esp_http_client_handle_t client = nullptr;
     std::string err;
+    ESP_LOGI(TAG, "OTA: downloading %s (%u B)", tag.c_str(), (unsigned)size);
     if (open_following_redirects(url, &client, err) != ESP_OK) {
         return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, err.c_str());
     }
+
+    // The bridge downloads server-side, so the browser cannot see the transfer.
+    // Stream progress to it as chunked text: a percentage per line, then "done"
+    // or "err:<message>".
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    int last_pct = -1;
+    std::function<void(size_t, size_t)> progress = [&](size_t done, size_t total) {
+        int pct = total ? (int)(100 * done / total) : 0;
+        if (pct != last_pct) {
+            last_pct = pct;
+            char line[8];
+            int n = snprintf(line, sizeof(line), "%d\n", pct);
+            httpd_resp_send_chunk(req, line, n);  // send errors are ignored; the OTA continues
+        }
+    };
+
     auto read = [&](uint8_t *b, size_t want) -> int {
         return esp_http_client_read(client, (char *)b, want);
     };
-    esp_err_t rc = ota_apply(size, read, err);
+    esp_err_t rc = ota_apply(size, read, err, &progress);
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
+
     if (rc != ESP_OK) {
-        return send_error(req, HTTPD_400_BAD_REQUEST, err.c_str());
+        std::string line = "err:" + err + "\n";
+        httpd_resp_send_chunk(req, line.data(), line.size());
+        httpd_resp_send_chunk(req, nullptr, 0);
+        return ESP_OK;
     }
-    send_ok(req);
+    httpd_resp_send_chunk(req, "done\n", 5);
+    httpd_resp_send_chunk(req, nullptr, 0);
     schedule_reboot();
     return ESP_OK;
 }
