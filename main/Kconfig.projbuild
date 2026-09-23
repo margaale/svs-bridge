@@ -58,6 +58,24 @@ menu "SVS Bridge"
                 up when the bridge has no working WiFi connection. Leave empty
                 for an open network; otherwise use at least 8 characters.
 
+        choice SVS_WIFI_POWER_SAVE
+            prompt "WiFi power save"
+            default SVS_WIFI_PS_NONE
+            help
+                Trades power draw for latency. "None" keeps the WiFi radio on at
+                all times (most responsive, highest power). "Minimum" (the
+                ESP-IDF default) sleeps between AP beacons. "Maximum" sleeps
+                longer to draw the least power, at the cost of a little latency
+                answering commands. LEDs barely matter next to this.
+
+            config SVS_WIFI_PS_NONE
+                bool "None (lowest latency)"
+            config SVS_WIFI_PS_MIN
+                bool "Minimum modem sleep"
+            config SVS_WIFI_PS_MAX
+                bool "Maximum modem sleep (lowest power)"
+        endchoice
+
     endmenu
 
     menu "Firmware updates"

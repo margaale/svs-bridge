@@ -193,8 +193,16 @@ void start()
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
-    // Mains powered: skip modem sleep so the web UI stays responsive
-    ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
+    // Power save trades latency for current draw (SVS Bridge -> Network menu).
+    // NONE keeps the web UI/HA snappiest; modem sleep saves power on battery.
+#if CONFIG_SVS_WIFI_PS_MAX
+    wifi_ps_type_t ps = WIFI_PS_MAX_MODEM;
+#elif CONFIG_SVS_WIFI_PS_MIN
+    wifi_ps_type_t ps = WIFI_PS_MIN_MODEM;
+#else
+    wifi_ps_type_t ps = WIFI_PS_NONE;
+#endif
+    ESP_ERROR_CHECK(esp_wifi_set_ps(ps));
 
     if (s_has_credentials) {
         ESP_LOGI(TAG, "Connecting to \"%s\"", (const char *)sta_config.sta.ssid);
