@@ -6,10 +6,13 @@
 #include <memory>
 #include <functional>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "esp_http_server.h"
 #include "esp_https_server.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
@@ -532,7 +535,7 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
     config.url = url.c_str();
     config.crt_bundle_attach = esp_crt_bundle_attach;
     config.timeout_ms = 20000;
-    config.buffer_size = 4096;
+    config.buffer_size = 2048;
     config.user_agent = "svs-bridge";
     config.max_redirection_count = 5;
     esp_http_client_handle_t client = esp_http_client_init(&config);
@@ -542,10 +545,27 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
     }
 
     for (int hop = 0; hop < 6; hop++) {
-        if (esp_http_client_open(client, 0) != ESP_OK) {
+        // Opening the TLS connection can fail transiently (e.g. under heap
+        // pressure while the HTTPS server also holds a session); retry, and on
+        // giving up report the exact error and the internal heap so the cause
+        // is visible without a serial console.
+        esp_err_t oe = ESP_FAIL;
+        for (int attempt = 0; attempt < 3 && oe != ESP_OK; attempt++) {
+            oe = esp_http_client_open(client, 0);
+            if (oe != ESP_OK) {
+                vTaskDelay(pdMS_TO_TICKS(400));
+            }
+        }
+        if (oe != ESP_OK) {
+            char msg[128];
+            snprintf(msg, sizeof(msg),
+                     "Could not reach GitHub (%s; internal heap %u B, largest block %u B)",
+                     esp_err_to_name(oe),
+                     (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+            err = msg;
             esp_http_client_cleanup(client);
-            err = "Could not reach GitHub";
-            return ESP_FAIL;
+            return oe;
         }
         esp_http_client_fetch_headers(client);
         int status = esp_http_client_get_status_code(client);
