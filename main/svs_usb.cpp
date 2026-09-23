@@ -18,6 +18,7 @@
 #include "freertos/stream_buffer.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 
 #include "usb/usb_host.h"
 #include "usb/usb_helpers.h"
@@ -63,10 +64,16 @@ static CdcAcmDevice *s_dev = nullptr;      // guarded by s_dev_mutex
 static volatile bool s_raw = false;
 static Info s_info = {"", -1, -1, false, false, 0, 0};  // guarded by s_dev_mutex
 static volatile bool s_send_allowed = false;  // listen-only until enabled
+// Set at boot from the reset reason: restart the SVS on the first connection
+// after a cold boot or a deliberate reboot, but not after a crash/watchdog.
+static bool s_restart_on_boot = false;
 
 // If a just-connected SVS has never reported anything, wait this long for a
 // banner (it may be booting too) before restarting it to get one
 static const int FIRST_BANNER_WAIT_MS = 4000;
+
+static esp_err_t do_restart_svs();          // the DTR reset pulse, without the send gate
+static esp_err_t do_send(const std::string &cmd);  // write a command, without the send gate
 
 static int64_t now_ms() { return esp_timer_get_time() / 1000; }
 
@@ -340,22 +347,40 @@ static void device_task(void *arg)
         xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
         s_dev = dev;
         s_info.connections++;
-        bool known = !s_info.firmware.empty();
         uint32_t boots = s_info.boots_seen;
         xSemaphoreGive(s_dev_mutex);
 
-        // Nothing known about this SVS yet (first install, factory reset):
-        // unless it is booting right now and prints its banner by itself,
-        // restart it once to learn its firmware version and inputs. Only in
-        // send mode: listen-only must never reset the SVS (it drops video and
-        // would fail with the RetroTINK's HD-15 connected anyway).
-        if (!known && s_send_allowed) {
+        // After a cold boot or a deliberate reboot, restart the SVS once on the
+        // first connection to read its fresh version and inputs -- but not after
+        // a crash or watchdog reset, so a boot loop never keeps resetting it.
+        // Unless the SVS is booting right now and prints its banner by itself.
+        // This is a DTR reset pulse, not a serial command, so it is allowed even
+        // in listen-only mode (the RetroTINK holds the RX line, not DTR).
+        if (s_restart_on_boot) {
+            s_restart_on_boot = false;  // one-shot: only the first connect after boot
+            // The SVS may be booting right now; wait briefly for its own banner.
             for (int i = 0; i < FIRST_BANNER_WAIT_MS / 100 && info().boots_seen == boots; i++) {
                 vTaskDelay(pdMS_TO_TICKS(100));
             }
             if (info().boots_seen == boots && is_connected()) {
-                log_add('*', "First time with this SVS: restarting it once to read its version");
-                restart_svs();
+                // It was already running and silent: remember the active input,
+                // restart it to read its version, then put the input back in case
+                // it auto-selected a different one on boot.
+                int prev_input = info().current_input;
+                log_add('*', "Bridge (re)started: restarting the SVS once to read its version");
+                do_restart_svs();
+                for (int i = 0; i < FIRST_BANNER_WAIT_MS / 100 && info().boots_seen == boots; i++) {
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }
+                // Always put the input back (this is part of the boot restart,
+                // not a user command), unless the SVS already re-selected it.
+                if (prev_input > 0 && is_connected() &&
+                    info().current_input != prev_input) {
+                    char cmd[32];
+                    snprintf(cmd, sizeof(cmd), "SVS_Change_Input_%d", prev_input);
+                    log_add('*', "Restoring the input that was active before the restart");
+                    do_send(cmd);
+                }
             }
         }
 
@@ -389,11 +414,21 @@ void start()
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
 
-    // Always start in listen-only. Send mode is not persisted: it must be
-    // re-enabled after each boot, so the bridge never comes up able to reset or
-    // flash the SVS on its own (safer with the RetroTINK's HD-15 connected).
+    // Always start in listen-only. Send mode (commands and firmware flashing) is
+    // not persisted: it must be re-enabled after each boot, so the bridge never
+    // comes up able to send to the SVS on its own (safer with the RetroTINK's
+    // HD-15 connected).
     s_send_allowed = false;
     ESP_LOGI(TAG, "SVS mode: listen only (default)");
+
+    // A one-time SVS reset on the first connection is still allowed after a cold
+    // boot or a deliberate reboot -- a DTR reset pulse, not a command -- so its
+    // fresh version and inputs are read. Not after a crash/watchdog, to avoid a
+    // boot loop hammering it.
+    esp_reset_reason_t reason = esp_reset_reason();
+    s_restart_on_boot = reason == ESP_RST_POWERON || reason == ESP_RST_SW;
+    ESP_LOGI(TAG, "Reset reason %d: %s restart the SVS on first connect",
+             (int)reason, s_restart_on_boot ? "will" : "won't");
 
     usb_host_config_t host_config = {};
     host_config.skip_phy_setup = false;
@@ -439,11 +474,11 @@ void set_send_allowed(bool allowed)
     ESP_LOGI(TAG, "SVS mode: %s", allowed ? "send allowed" : "listen only");
 }
 
-esp_err_t restart_svs()
+// The DTR reset pulse itself, without the send-mode gate. A reset is a hardware
+// pulse on the DTR line, not a serial command, so it is safe even in listen-only
+// mode (and works with the RetroTINK connected, which only holds the RX line).
+static esp_err_t do_restart_svs()
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
     if (s_dev == nullptr || s_raw) {
         xSemaphoreGive(s_dev_mutex);
@@ -466,11 +501,16 @@ esp_err_t restart_svs()
     return err;
 }
 
-esp_err_t send(const std::string &cmd)
+esp_err_t restart_svs()
 {
     if (!s_send_allowed) {
         return ESP_ERR_NOT_SUPPORTED;
     }
+    return do_restart_svs();
+}
+
+static esp_err_t do_send(const std::string &cmd)
+{
     std::string out = cmd + EOL;
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
     if (s_dev == nullptr || s_raw) {
@@ -486,6 +526,14 @@ esp_err_t send(const std::string &cmd)
         log_add('*', "Could not send " + cmd + ": " + esp_err_to_name(err));
     }
     return err;
+}
+
+esp_err_t send(const std::string &cmd)
+{
+    if (!s_send_allowed) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    return do_send(cmd);
 }
 
 // ---------------------------------------------------------------------------
