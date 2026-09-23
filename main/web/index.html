@@ -1122,8 +1122,8 @@ $('fw-file').onchange = async () => {
 $('fw-btn').onclick = async () => {
   const file = $('fw-file').files[0];
   if (!file || !fwImage) return;
-  if (!await confirmModal(`Update the bridge to ${fwImage.project} ${fwImage.version}?\n\n` +
-               `SHA-256 ${fwImage.sha256}`, {danger: true, okText: 'Update bridge'})) return;
+  if (!await confirmModal(`Update the bridge to ${fwImage.project} ${fwImage.version}?`,
+               {danger: true, okText: 'Update bridge'})) return;
   const msg = $('fw-msg');
   const bar = $('fw-progress');
   const before = status ? status.firmware.partition : null;
@@ -1311,20 +1311,60 @@ $('fw-gh-btn').onclick = async () => {
                           {danger: true, okText: 'Update bridge'})) return;
   const msg = $('fw-msg'), bar = $('fw-progress');
   const before = status ? status.firmware.partition : null;
-  $('fw-gh-btn').disabled = true;
-  $('fw-rel').disabled = true;
-  bar.hidden = false;
-  bar.removeAttribute('value');  // indeterminate: the bridge downloads server-side
-  setMsg(msg, 'Downloading from GitHub and installing… (this can take a minute)');
-  try {
-    await post('/device/ota/github', {tag});
-  } catch (e) {
-    setMsg(msg, 'Update failed: ' + e.message, 'bad');
+  const fail = (text) => {
+    setMsg(msg, text, 'bad');
     $('fw-gh-btn').disabled = false;
     $('fw-rel').disabled = false;
     bar.hidden = true;
+  };
+  $('fw-gh-btn').disabled = true;
+  $('fw-rel').disabled = true;
+  bar.hidden = false;
+  bar.value = 0;
+  setMsg(msg, 'Downloading from GitHub… 0%');
+
+  // The bridge downloads server-side and streams progress back as chunked text:
+  // a percentage per line, then "done" or "err:<message>".
+  let res;
+  try {
+    res = await fetch('/device/ota/github', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tag}),
+    });
+  } catch (e) { fail('Update failed (connection lost)'); return; }
+  if (res.status === 401) { showAuth('login'); return; }
+  if (!res.ok) {
+    let text = await res.text();
+    try { text = JSON.parse(text).error || text; } catch (e) { /* plain text */ }
+    fail('Update failed: ' + (text || res.statusText));
     return;
   }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', done = false, error = null;
+  while (true) {
+    let chunk;
+    try { chunk = await reader.read(); } catch (e) { break; }  // device rebooted
+    if (chunk.done) break;
+    buf += dec.decode(chunk.value, {stream: true});
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line === 'done') {
+        done = true;
+      } else if (line.startsWith('err:')) {
+        error = line.slice(4);
+      } else if (/^\d+$/.test(line)) {
+        bar.value = +line;
+        setMsg(msg, +line < 100 ? `Downloading from GitHub… ${line}%` : 'Verifying and installing…');
+        if (+line >= 100) bar.removeAttribute('value');  // indeterminate while it verifies
+      }
+    }
+  }
+  if (error) { fail('Update failed: ' + error); return; }
   setMsg(msg, 'Installed. Restarting…');
   waitForReboot({partition: before, version: tag});
 };
