@@ -310,13 +310,28 @@ class Handler(BaseHTTPRequestHandler):
             state["firmware"]["partition"] = "ota_1" if part == "ota_0" else "ota_0"
             self.send_json({"ok": True})
         elif path == "/device/ota/github":
-            time.sleep(2)
             tag = json.loads(body or b"{}").get("tag", "").lstrip("v")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.end_headers()
+
+            def chunk(s):
+                data = s.encode()
+                self.wfile.write(f"{len(data):X}\r\n".encode() + data + b"\r\n")
+                self.wfile.flush()
+
+            for pct in range(0, 101, 5):
+                chunk(f"{pct}\n")
+                time.sleep(0.15)
+            time.sleep(0.8)  # simulate the verify pause
+            chunk("done\n")
+            self.wfile.write(b"0\r\n\r\n")  # end of chunked body
+            self.wfile.flush()
             if tag:
                 state["firmware"]["version"] = tag
             part = state["firmware"]["partition"]
             state["firmware"]["partition"] = "ota_1" if part == "ota_0" else "ota_0"
-            self.send_json({"ok": True})
         elif path in ("/device/reboot", "/device/factory-reset"):
             self.send_json({"ok": True})
         elif path == "/device/api-token/regenerate":
