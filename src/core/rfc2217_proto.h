@@ -54,6 +54,12 @@ size_t rfc2217_modemstate(uint8_t modem_state, uint8_t *out, size_t max);
 // `in` fit.
 size_t rfc2217_escape(const uint8_t *in, size_t len, uint8_t *out, size_t max, size_t *used);
 
+// A readable description of Telnet/RFC 2217 bytes, for the traffic log: "WILL BINARY, DO COM-PORT,
+// SET-BAUDRATE 9600, text "AT"". Works on one chunk as it came (a sequence cut at the end is marked),
+// understands both directions (a server reply is the client's command + 100). NUL-terminated, truncated
+// with "..." if out is too small.
+void rfc2217_describe(const uint8_t *in, size_t len, char *out, size_t max);
+
 #ifdef __cplusplus
 }
 #endif

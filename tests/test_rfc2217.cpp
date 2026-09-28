@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 static int g_failures = 0;
@@ -120,6 +121,33 @@ static void test_bad_input() {
     CHECK((r.reply == Bytes{255, 254, 99, 255, 252, 99}));
 }
 
+static std::string describe(const Bytes &b, size_t max = 256) {
+    char out[512];
+    rfc2217_describe(b.data(), b.size(), out, max < sizeof(out) ? max : sizeof(out));
+    return out;
+}
+
+static void test_describe() {
+    // The log lines of a real client: what the bridge offers, what the client asks, what is answered.
+    CHECK(describe({255, 251, 0, 255, 253, 0, 255, 251, 3, 255, 253, 3, 255, 253, 44}) ==
+          "WILL BINARY, DO BINARY, WILL SUPPRESS-GO-AHEAD, DO SUPPRESS-GO-AHEAD, DO COM-PORT");
+    CHECK(describe({255, 250, 44, 1, 0, 0, 0x25, 0x80, 255, 240, 255, 250, 44, 2, 8, 255, 240, 255, 250, 44, 3, 1, 255, 240}) ==
+          "SET-BAUDRATE 9600, SET-DATASIZE 8, SET-PARITY none");
+    CHECK(describe({255, 250, 44, 1, 0, 0, 0, 0, 255, 240}) == "SET-BAUDRATE query");
+    CHECK(describe({255, 250, 44, 101, 0, 1, 0xC2, 0, 255, 240}) == "SET-BAUDRATE (reply) 115200");
+    CHECK(describe({255, 250, 44, 5, 8, 255, 240}) == "SET-CONTROL DTR on");
+    CHECK(describe({255, 250, 44, 7, 0xb0, 255, 240}) == "MODEMSTATE 0B0 (CTS DSR CD)" ||
+          describe({255, 250, 44, 7, 0xb0, 255, 240}) == "MODEMSTATE B0 (CTS DSR CD)");
+    // Data, with a doubled 0xFF and a control character.
+    CHECK(describe({'A', 'T', 13, 255, 255}) == "text \"AT<0D>\", text \"<FF>\"");
+    // A sequence cut by the end of the chunk is said so, not misread.
+    CHECK(describe({255, 251}) == "(cut after IAC 251)");
+    CHECK(describe({255, 250, 44, 1, 0}) == "(subnegotiation cut)");
+    // Too small a buffer: truncated, terminated.
+    const std::string small = describe({255, 251, 0, 255, 253, 0, 255, 251, 3}, 12);
+    CHECK(small.size() == 11 && small.substr(8) == "...");
+}
+
 int main() {
     test_greeting();
     test_data_and_escape();
@@ -127,6 +155,7 @@ int main() {
     test_settings_are_acknowledged();
     test_notify_and_signature();
     test_bad_input();
+    test_describe();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);
         return 1;

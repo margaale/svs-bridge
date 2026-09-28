@@ -52,30 +52,10 @@ static int64_t now_ms(void) {
     return esp_timer_get_time() / 1000;
 }
 
-// Up to `max` bytes as hex ("FF FB 00 ..."), for the traffic log
-static std::string hex(const uint8_t *p, size_t len, size_t max = 24) {
-    std::string out;
-    char b[4];
-    for (size_t i = 0; i < len && i < max; i++) {
-        snprintf(b, sizeof(b), i ? " %02X" : "%02X", p[i]);
-        out += b;
-    }
-    if (len > max) out += " ...";
-    return out;
-}
-
-// Text as it came, control characters as <XX>, for the traffic log
-static std::string printable(const uint8_t *p, size_t len) {
-    std::string out;
-    char b[8];
-    for (size_t i = 0; i < len && out.size() < 96; i++) {
-        if (p[i] >= 0x20 && p[i] < 0x7F) {
-            out += (char)p[i];
-        } else {
-            snprintf(b, sizeof(b), "<%02X>", p[i]);
-            out += b;
-        }
-    }
+// Telnet/RFC 2217 bytes in words ("WILL BINARY, SET-BAUDRATE 9600, text \"AT\""), for the traffic log
+static std::string describe(const uint8_t *p, size_t len) {
+    char out[384];
+    rfc2217_describe(p, len, out, sizeof(out));
     return out;
 }
 
@@ -210,9 +190,9 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     } else {
         printf("rfc2217: client %s connected\n", c->ip);
         char b[160];
-        snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected); sent ", (unsigned)c->port,
+        snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected); offered: ", (unsigned)c->port,
                  connected_count(), MAX_CLIENTS);
-        note(c, b + hex(buf, n) + " (Telnet options)");
+        note(c, b + describe(buf, n));
     }
 }
 
@@ -271,10 +251,9 @@ static void rfc2217_task(void *param) {
                 io.reply = reply;
                 io.reply_max = sizeof(reply);
                 rfc2217_input(&c->proto, in, (size_t)n, &io, modem);
-                // What the client sent: its Telnet/RFC 2217 negotiation and any text, and the answer
-                note(c, "received " + std::to_string(n) + " bytes: " + hex(in, (size_t)n) +
-                            (io.data_len ? " (text: \"" + printable(data, io.data_len) + "\")" : "") +
-                            (io.reply_len ? "; answered " + hex(reply, io.reply_len) : ""));
+                // What the client sent (Telnet/RFC 2217 negotiation and any text) and the answer
+                note(c, "received " + std::to_string(n) + " bytes: " + describe(in, (size_t)n) +
+                            (io.reply_len ? "; answered: " + describe(reply, io.reply_len) : ""));
                 if (io.reply_len && !send_to(c, reply, io.reply_len)) {
                     drop_client(c, "failed");
                     continue;
