@@ -113,6 +113,11 @@ void log_note(const std::string &text)
     log_add('*', text);
 }
 
+uint32_t log_head()
+{
+    return s_log_seq;
+}
+
 std::vector<LogEntry> log_since(uint32_t after, size_t max)
 {
     std::vector<LogEntry> out;

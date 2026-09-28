@@ -81,6 +81,9 @@ struct LogEntry {
     std::string text;
 };
 
+// Sequence number of the newest entry (0 if none): what to pass as `after` to see only what comes next
+uint32_t log_head();
+
 // Entries with seq > after (at most max), oldest first
 std::vector<LogEntry> log_since(uint32_t after, size_t max);
 

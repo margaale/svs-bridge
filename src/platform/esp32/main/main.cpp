@@ -29,6 +29,7 @@
 #include "auth.h"
 #include "cruller.h"
 #include "factory_reset.h"
+#include "rfc2217.h"
 #include "svs_flasher.h"
 #include "svs_settings.h"
 #include "svs_usb.h"
@@ -125,7 +126,7 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(auth::load());
     ESP_ERROR_CHECK(tls_cert::load());
     web_server::start();
-
+    rfc2217_start();
     // After an OTA update the new image boots in "pending verify" state. It is
     // only confirmed once it is reachable again, so a remote bridge cannot be
     // stranded by a bad update; see confirm_update_task(). If it crashes
