@@ -90,16 +90,6 @@ static esp_err_t send_error(httpd_req_t *req, httpd_err_code_t code, const char 
     return httpd_resp_send_err(req, code, msg);
 }
 
-// The bridge is set to only listen to the SVS, not talk back
-static esp_err_t send_listen_only(httpd_req_t *req)
-{
-    JsonDocument doc;
-    doc["error"] = "The bridge is in listen-only mode. Turn on \"Send commands\" first "
-                   "(disconnect the RetroTINK's HD-15 before sending or flashing).";
-    httpd_resp_set_status(req, "403 Forbidden");
-    return send_json(req, doc);
-}
-
 // Rebooting or updating the bridge now would interrupt the SVS update, or
 // talking to the SVS now would interleave with reading or saving its settings
 static esp_err_t send_busy(httpd_req_t *req)
@@ -231,7 +221,7 @@ static void add_svs_info(JsonObject svs)
     // false: last known values, from before the bridge restarted
     svs["live"] = info.live;
     svs["inputs_live"] = info.inputs_live;
-    svs["send_enabled"] = svs_usb::send_allowed();
+    svs["send_enabled"] = true;  // there is no listen-only mode any more; kept for integrations
     // The name given to the active input in the web UI ("" if none)
     svs["current_input_name"] = info.current_input > 0 ? svs_settings::input_name(info.current_input) : "";
     // The console picked for it in the web UI (an id such as "snes"; "" if none)
@@ -788,9 +778,6 @@ static esp_err_t svs_log_get(httpd_req_t *req)
 // Body: {"command": "SVS_Input_Up"}; sent as typed, plus the configured line ending
 static esp_err_t svs_send_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     JsonDocument body;
     if (!read_json_body(req, body)) {
         return ESP_OK;
@@ -815,26 +802,9 @@ static esp_err_t svs_send_post(httpd_req_t *req)
     return send_ok(req);
 }
 
-// Sets whether the bridge may send to the SVS. Body: {"send": bool}
-static esp_err_t svs_mode_post(httpd_req_t *req)
-{
-    if (svs_flasher::busy() || svs_settings::busy()) {
-        return send_busy(req);
-    }
-    JsonDocument body;
-    if (!read_json_body(req, body)) {
-        return ESP_OK;
-    }
-    svs_usb::set_send_allowed(body["send"] | false);
-    return svs_get(req);
-}
-
 // Restarts the SVS so it reports its firmware version and inputs again
 static esp_err_t svs_restart_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     if (svs_settings::busy()) {
         return send_busy(req);
     }
@@ -851,9 +821,6 @@ static esp_err_t svs_restart_post(httpd_req_t *req)
 // Validates the vector-bootloader patch against the chip; writes nothing
 static esp_err_t svs_preview_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
@@ -866,9 +833,6 @@ static esp_err_t svs_preview_post(httpd_req_t *req)
 // Bootloader diagnostics (restarts the SVS several times; writes nothing)
 static esp_err_t svs_probe_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
@@ -881,9 +845,6 @@ static esp_err_t svs_probe_post(httpd_req_t *req)
 // Step 1: identify the SVS bootloader (restarts the SVS)
 static esp_err_t svs_check_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
@@ -962,9 +923,6 @@ static esp_err_t svs_firmware_official_post(httpd_req_t *req)
 
 static esp_err_t svs_flash_post(httpd_req_t *req)
 {
-    if (!svs_usb::send_allowed()) {
-        return send_listen_only(req);
-    }
     if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
@@ -1050,9 +1008,6 @@ static esp_err_t svs_config_get(httpd_req_t *req)
 
 static esp_err_t settings_error(httpd_req_t *req, esp_err_t err, const std::string &error)
 {
-    if (err == ESP_ERR_NOT_SUPPORTED) {
-        return send_listen_only(req);
-    }
     JsonDocument doc;
     doc["error"] = error.empty() ? esp_err_to_name(err) : error;
     httpd_resp_set_status(req, err == ESP_ERR_INVALID_ARG ? "400 Bad Request" : "409 Conflict");
@@ -1414,7 +1369,6 @@ static const RouteEntry HTTPS_ROUTES[] = {
     {"/device/factory-reset", HTTP_POST, {factory_reset_post, Access::Admin, false}},
     {"/device/svs", HTTP_GET, {svs_get, Access::Admin, false}},
     {"/device/svs/log", HTTP_GET, {svs_log_get, Access::Admin, false}},
-    {"/device/svs/mode", HTTP_POST, {svs_mode_post, Access::Admin, false}},
     {"/device/svs/restart", HTTP_POST, {svs_restart_post, Access::Admin, false}},
     {"/device/svs/send", HTTP_POST, {svs_send_post, Access::Admin, false}},
     {"/device/svs/check", HTTP_POST, {svs_check_post, Access::Admin, false}},

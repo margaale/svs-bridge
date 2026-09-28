@@ -236,10 +236,9 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 
 <div class="panel">
 <h2>Control</h2>
-<label class="switch" id="svs-send-label" hidden><input type="checkbox" id="svs-send-toggle"><span>Send commands to the SVS</span></label>
 <div class="note" id="svs-mode-hint"></div>
 <div class="grow"></div>
-<button id="svs-restart-btn" hidden>Restart SVS</button>
+<button id="svs-restart-btn">Restart SVS</button>
 <div class="msg" id="svs-restart-msg"></div>
 </div>
 
@@ -727,23 +726,15 @@ function renderSvs(s) {
   if (known && name) text('v-sub', name);
   renderSwitch();
 
-  // Send vs. listen-only mode. The whole mode UI only makes sense with an SVS
-  // attached, so it is hidden until one is connected.
-  const send = s.send_enabled;
-  $('svs-send-toggle').checked = send;
-  $('svs-send-label').hidden = !s.connected;
-  $('svs-mode-hint').className = 'note' + (send ? ' warn' : '');
+  // Sending always works with an SVS attached; what it needs is the RetroTINK's
+  // HD-15 unplugged (the SVS shares that line). Restarting (a DTR pulse) does not.
   text('svs-mode-hint', !s.connected
     ? 'Plug the SVS into the bridge\'s USB port.'
-    : send
-      ? 'The bridge can send commands and update the SVS firmware. Keep the RetroTINK\'s HD-15 '
-        + 'disconnected while sending: the SVS shares that line.'
-      : 'The bridge only listens to the SVS (its active input), so the RetroTINK\'s HD-15 can stay connected. '
-        + 'Turn this on to send commands or update the firmware; disconnect the HD-15 first.');
-  $('svs-restart-btn').hidden = !send || !s.connected;
-  $('svs-restart-btn').disabled = s.update.task !== 'idle';
-  $('svs-send-form').hidden = !send || !s.connected;
-  $('svs-fw-section').hidden = !send || !s.connected;
+    : 'Commands, settings and firmware updates reach the SVS only with the RetroTINK\'s HD-15 unplugged: '
+      + 'the SVS shares that line. Restarting it works either way.');
+  $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
+  $('svs-send-form').hidden = !s.connected;
+  $('svs-fw-section').hidden = !s.connected;
 
   const u = s.update;
   const d = u.device;
@@ -931,7 +922,6 @@ let edits = null;          // the settings as changed on this page (null until r
 let editsSeq = -1;         // the read they started from
 let sel = {t: 'ctl', i: 0};
 let remote = 'RetroTINK 4K Pro';
-let listenAfter = false;   // back to listen-only once a read or save ends
 let cfgOp = false;         // a read or save started from this page is running
 
 const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
@@ -1328,10 +1318,6 @@ async function refreshCfg() {
   if (!signedIn) return;
   try { cfg = await api('/device/svs/config'); } catch (e) { /* busy */ }
   const running = cfg && cfg.task !== 'idle';
-  if (!running && listenAfter) {
-    listenAfter = false;
-    try { renderSvs(await post('/device/svs/mode', {send: false})); } catch (e) { /* shown next poll */ }
-  }
   if (!running && cfgOp) {
     cfgOp = false;
     busy({mode: cfg.result_ok ? 'ok' : 'bad', title: cfg.result_ok ? (cfg.result_of === 'reading' ? 'Settings read' : 'Saved to the SVS') : 'That did not work',
@@ -1352,20 +1338,12 @@ async function cfgStart(kind) {
     '\n\nPlug it back in when this is done.', kind === 'read' ? 'It’s unplugged, read' : 'It’s unplugged, save');
   if (!ok) return;
   try {
-    if (!svs.send_enabled) {
-      renderSvs(await post('/device/svs/mode', {send: true}));
-      listenAfter = true;
-    }
     cfg = await post(kind === 'read' ? '/device/svs/config/read' : '/device/svs/config/write',
                      kind === 'read' ? {} : {settings: edits.slice(0, cfg.snapshot.inputs)});
     cfgOp = true;
     refreshCfg();
   } catch (err) {
     setMsg($('cfg-msg'), err.message, 'bad');
-    if (listenAfter) {
-      listenAfter = false;
-      try { renderSvs(await post('/device/svs/mode', {send: false})); } catch (e) { /* ignore */ }
-    }
   }
 }
 $('cfg-read').onclick = () => cfgStart('read');
@@ -1664,24 +1642,6 @@ $('svs-send-form').onsubmit = async (e) => {
     pollLog();
   } catch (err) {
     setMsg($('svs-send-msg'), err.message, 'bad');
-  }
-};
-
-$('svs-send-toggle').onchange = async (e) => {
-  const on = e.target.checked;
-  if (on && !await askUser('Send commands to the SVS?',
-                           'This allows the bridge to send commands and flash the SVS.\n\n' +
-                           'Disconnect the RetroTINK\'s HD-15 first: the SVS shares that line and will not respond otherwise.',
-                           'Allow sending')) {
-    e.target.checked = false;
-    return;
-  }
-  try {
-    setMsg($('svs-restart-msg'), '');
-    renderSvs(await post('/device/svs/mode', {send: on}));
-  } catch (err) {
-    setMsg($('svs-restart-msg'), err.message, 'bad');
-    e.target.checked = !on;
   }
 };
 
