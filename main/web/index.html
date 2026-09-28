@@ -101,6 +101,11 @@ dialog#ask p{margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--soft);wh
 .pw button.eye{position:absolute;right:2px;top:2px;width:34px;height:34px;padding:0;border:0;color:var(--faint)}
 .pw button.eye:hover{color:var(--text)}
 .stack{display:flex;flex-direction:column;gap:8px}
+/* Cruller tab */
+.clist{display:flex;flex-direction:column;gap:8px}
+.crow{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--raised);border:1px solid var(--line);border-radius:10px}
+.crow.on{background:#3A1E2A;border-color:var(--accent)}
+.crow .cn{font-weight:600;overflow-wrap:anywhere}
 label.lbl{font-size:13px;font-weight:500;color:var(--soft)}
 /* sign-in (create the password / log in) */
 body.auth header nav,body.auth header .chip{display:none}
@@ -116,7 +121,7 @@ button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
 <body class="auth">
 <header>
 <div class="logo"><svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#E8618C" stroke-width="4" aria-hidden="true"><circle cx="14" cy="14" r="10"/></svg><span>SVS Bridge</span></div>
-<nav class="tabs" aria-label="Sections"><a href="#svs" data-tab="svs">SVS</a><a href="#bridge" data-tab="bridge">Bridge</a><a href="#ha" data-tab="ha">Home Assistant</a></nav>
+<nav class="tabs" aria-label="Sections"><a href="#svs" data-tab="svs">SVS</a><a href="#cruller" data-tab="cruller">Cruller</a><a href="#bridge" data-tab="bridge">Bridge</a><a href="#ha" data-tab="ha">Home Assistant</a></nav>
 <div class="grow"></div>
 <div class="chip hide-sm" id="chip-svs"><span class="dot" id="svs-dot"></span><span id="svs-chip">Connecting…</span></div>
 <div class="chip hide-sm" id="chip-wifi" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></svg><span id="wifi-chip"></span></div>
@@ -219,6 +224,29 @@ button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
 <div class="msg" id="svs-flash-msg"></div>
 </div></li>
 </ol>
+</div>
+</section>
+
+<!-- Cruller -->
+<section data-view="cruller" class="grid3" hidden>
+<div class="panel span2">
+<div class="row"><h2 class="grow">Crullers on the network</h2><button type="button" class="refresh" id="cr-scan" aria-label="Look again" title="Look again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></div>
+<div class="clist" id="cr-list"></div>
+<div class="small" id="cr-empty" hidden>No Cruller found yet. Check that it is on and on the same network as the bridge.</div>
+<div class="msg" id="cr-msg"></div>
+</div>
+
+<div class="panel">
+<div class="row"><h2 class="grow">Reports</h2><span class="dot" id="cr-dot"></span></div>
+<div style="font-size:20px;font-weight:600" id="cr-state">–</div>
+<div class="kv"><span>Reporting to</span><span id="cr-to">–</span><span>Last report</span><span id="cr-last">–</span><span>Accepted</span><span id="cr-count">–</span></div>
+<div class="note warn" id="cr-err" hidden></div>
+</div>
+
+<div class="panel span3">
+<h2>How it works</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">The RetroTINK 4K cannot tell Cruller when the switch changes input, so the bridge does. Pick the Cruller connected to the RetroTINK this switch feeds: the bridge sends it the active input on every change, when it finds it (also after it restarts) and every minute. Cruller then applies only the game profile of the console on screen.</div>
+<div class="small">A Cruller takes reports from the first bridge that sends them. To move it to another bridge, press Unpair in its Cruller tab. Crullers announce themselves over mDNS as <span class="mono">_rt4k._tcp</span>; the bridge remembers the one you pick by its id, so its address may change.</div>
 </div>
 </section>
 
@@ -476,12 +504,13 @@ let tab = 'svs';
 
 function route() {
   const t = location.hash.slice(1);
-  tab = ['svs', 'bridge', 'ha'].includes(t) ? t : 'svs';
+  tab = ['svs', 'cruller', 'bridge', 'ha'].includes(t) ? t : 'svs';
   for (const e of document.querySelectorAll('[data-view]')) e.hidden = !signedIn || e.dataset.view !== tab;
   for (const a of document.querySelectorAll('nav.tabs a')) a.toggleAttribute('aria-current', a.dataset.tab === tab);
-  $('chip-svs').hidden = tab !== 'svs' && tab !== 'ha';
+  $('chip-svs').hidden = tab === 'bridge';
   $('chip-wifi').hidden = $('chip-ver').hidden = !$('chip-svs').hidden;
   if (signedIn && tab === 'bridge') fwLoadReleases();
+  if (signedIn && tab === 'cruller') refreshCruller();
 }
 addEventListener('hashchange', route);
 
@@ -721,6 +750,96 @@ async function refreshSvs() {
   // Poll faster while checking or flashing
   svsTimer = setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
 }
+
+// --- Cruller -------------------------------------------------------------------
+
+let cruller = null;
+let crullerTimer = null;
+
+function crullerLabel(c) { return c.name || c.instance || c.id; }
+
+function crullerRow(title, detail, on, button) {
+  const row = document.createElement('div');
+  row.className = 'crow' + (on ? ' on' : '');
+  row.innerHTML = `<div class="grow" style="min-width:0"><div class="cn">${esc(title)}</div>` +
+    `<div class="small mono" style="overflow-wrap:anywhere">${esc(detail)}</div></div>`;
+  row.appendChild(button);
+  return row;
+}
+
+function renderCruller(s) {
+  cruller = s;
+  const list = $('cr-list');
+  list.textContent = '';
+  const chosen = s.found.find((c) => c.selected);
+  const missing = s.selected && !chosen;
+  for (const c of s.found) {
+    const b = document.createElement('button');
+    if (c.selected) { b.textContent = 'Stop'; b.onclick = () => crullerSelect(''); }
+    else { b.textContent = 'Report here'; b.className = 'primary'; b.onclick = () => crullerSelect(c.id); }
+    const detail = [c.host, c.ip, c.version && 'v' + c.version].filter(Boolean).join(' · ');
+    list.appendChild(crullerRow(crullerLabel(c), detail, c.selected, b));
+  }
+  if (missing) {
+    const b = document.createElement('button');
+    b.textContent = 'Forget';
+    b.onclick = () => crullerSelect('');
+    list.appendChild(crullerRow('The chosen Cruller', s.selected + ' · not on the network right now', true, b));
+  }
+  $('cr-empty').hidden = s.found.length > 0 || missing;
+
+  const l = s.last;
+  let state, cls;
+  if (!s.selected) { state = 'Not reporting'; cls = ''; }
+  else if (missing) { state = 'Looking for it'; cls = 'warn'; }
+  else if (!l) { state = 'Waiting for the SVS input'; cls = 'warn'; }
+  else if (l.ok) { state = 'Reporting'; cls = 'ok'; }
+  else if (l.http_status === 409) { state = 'Paired with another bridge'; cls = 'bad'; }
+  else { state = 'Not getting through'; cls = 'bad'; }
+  text('cr-state', state);
+  $('cr-state').className = cls;
+  $('cr-dot').className = 'dot ' + cls;
+  text('cr-to', chosen ? crullerLabel(chosen) : s.selected || '–');
+  text('cr-last', l ? `input ${l.input} · ${duration(l.ago_s)} ago` : '–');
+  text('cr-count', l ? String(l.count) : '–');
+  const err = !s.selected || !l || l.ok ? '' : l.http_status === 409
+    ? `This Cruller is paired with another SVS Bridge${l.paired_with ? ' (' + l.paired_with + ')' : ''}. ` +
+      'Press Unpair in its Cruller tab, and it takes this bridge\'s reports.'
+    : l.error;
+  $('cr-err').hidden = !err;
+  text('cr-err', err);
+}
+
+async function refreshCruller() {
+  clearTimeout(crullerTimer);
+  if (!signedIn || tab !== 'cruller') return;
+  try { renderCruller(await api('/device/cruller')); } catch (e) { /* busy */ }
+  crullerTimer = setTimeout(refreshCruller, 5000);
+}
+
+async function crullerSelect(id) {
+  try {
+    setMsg($('cr-msg'), '');
+    renderCruller(await post('/device/cruller/select', {id}));
+    setTimeout(refreshCruller, 1500);  // the first report goes out right away
+  } catch (err) {
+    setMsg($('cr-msg'), err.message, 'bad');
+  }
+}
+
+$('cr-scan').onclick = async () => {
+  const b = $('cr-scan');
+  b.disabled = true;
+  b.classList.add('spin');
+  try {
+    setMsg($('cr-msg'), '');
+    renderCruller(await post('/device/cruller/scan'));
+  } catch (err) {
+    setMsg($('cr-msg'), err.message, 'bad');
+  }
+  b.disabled = false;
+  b.classList.remove('spin');
+};
 
 // --- SVS serial log -----------------------------------------------------------
 

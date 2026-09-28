@@ -7,6 +7,7 @@
 //  - Factory reset from the web UI or the BOOT button (factory_reset)
 //  - SVS firmware updates over USB, from the official repository or an
 //    uploaded file (svs_flasher, svs_fw_repo)
+//  - Reports the active input to a Cruller (RT4K bridge) found over mDNS (cruller)
 //
 // Anything typed on the "COM" port console and confirmed with Enter is sent to
 // the SVS (e.g. SVS_Change_Input_3).
@@ -26,6 +27,7 @@
 #include "driver/uart.h"
 
 #include "auth.h"
+#include "cruller.h"
 #include "factory_reset.h"
 #include "svs_flasher.h"
 #include "svs_usb.h"
@@ -117,6 +119,7 @@ extern "C" void app_main(void)
     svs_usb::start();
     svs_flasher::init();
     wifi_manager::start();
+    cruller::start();  // after wifi_manager, which starts mDNS
     ESP_ERROR_CHECK(auth::load());
     ESP_ERROR_CHECK(tls_cert::load());
     web_server::start();
