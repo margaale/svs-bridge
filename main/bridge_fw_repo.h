@@ -1,6 +1,7 @@
 // The bridge's own firmware releases, fetched from its GitHub repository.
 //
-// Lists the GitHub releases that carry an "svs_bridge.bin" asset, so the web UI
+// Lists the GitHub releases that carry an OTA image (an asset named "svs_bridge.bin" or
+// ending in "-svs_bridge.bin"), so the web UI
 // can offer an over-the-air update straight from GitHub. Works anonymously,
 // which requires the repository to be public; a private repository answers 404.
 #pragma once

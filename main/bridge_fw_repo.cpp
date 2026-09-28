@@ -15,7 +15,9 @@ static const char *TAG = "bridge_fw_repo";
 
 // The bridge's own repository. Public releases are read anonymously.
 static const char *LIST_URL =
-    "https://api.github.com/repos/margaale/svs-bridge/releases?per_page=15";
+    "https://api.github.com/repos/margaale/svs-bridge/releases?per_page=30";  // alphas add up
+// The OTA image: "svs-bridge-<version>-<board>-svs_bridge.bin" (CI names it so), or plain
+// "svs_bridge.bin" as on earlier releases.
 static const char *ASSET_NAME = "svs_bridge.bin";
 static const size_t MAX_LIST_BYTES = 256 * 1024;  // release notes can be large
 
@@ -23,6 +25,13 @@ static const size_t MAX_LIST_BYTES = 256 * 1024;  // release notes can be large
 static const int64_t CACHE_US = 60LL * 1000 * 1000;
 static std::vector<Release> s_releases;
 static int64_t s_listed_at = 0;
+
+static bool is_image(const std::string &name)
+{
+    const std::string plain(ASSET_NAME), suffix = std::string("-") + ASSET_NAME;
+    return name == plain ||
+           (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0);
+}
 
 static esp_err_t http_get(const char *url, std::string &body, std::string *error)
 {
@@ -115,7 +124,7 @@ esp_err_t list(std::vector<Release> &out, std::string *error)
         r.notes_url = rel["html_url"] | "";
         r.prerelease = rel["prerelease"] | false;
         for (JsonObject asset : rel["assets"].as<JsonArray>()) {
-            if ((asset["name"] | "") == std::string(ASSET_NAME)) {
+            if (is_image(asset["name"] | "")) {
                 r.size = asset["size"] | 0;
                 r.url = asset["browser_download_url"] | "";
                 break;

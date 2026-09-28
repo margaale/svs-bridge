@@ -1234,6 +1234,17 @@ $('reset-btn').onclick = async () => {
 // --- Bridge firmware from GitHub --------------------------------------------
 
 let fwLoaded = false;
+
+// "0.3.10" vs "0.3.9": -1, 0, 1. A pre-release comes before its release, and pre-releases compare by N,
+// CI's run number, whatever their label: 0.3.3-pr.40 < 0.3.3-alpha.41 < 0.3.3 (as in Cruller).
+function cmpVersion(a, b) {
+  const [ca, pa] = a.split('-'), [cb, pb] = b.split('-');
+  const x = ca.split('.').map(Number), y = cb.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) ? -1 : 1;
+  if (!pa || !pb) return pa ? -1 : pb ? 1 : 0;
+  const na = Number(pa.split('.').pop()), nb = Number(pb.split('.').pop());
+  return na === nb ? 0 : na < nb ? -1 : 1;
+}
 async function fwLoadReleases(force) {
   if (fwLoaded && !force) return;
   fwLoaded = true;
@@ -1247,18 +1258,22 @@ async function fwLoadReleases(force) {
     const data = await api('/device/releases');
     sel.innerHTML = '';
     const list = data.releases || [];
+    const running = data.running;
     for (const r of list) {
       const o = document.createElement('option');
-      const installed = r.tag.replace(/^v/, '') === data.running;
+      const c = cmpVersion(r.tag.replace(/^v/, ''), running);
       o.value = r.tag;
       o.dataset.notes = r.notes_url || '';
-      o.textContent = r.tag + (r.prerelease ? ' · pre-release' : '') + (installed ? ' · installed' : '');
+      o.textContent = r.tag + (r.prerelease ? ' · alpha' : '') + (c === 0 ? ' · installed' : c < 0 ? ' · older' : '');
       sel.appendChild(o);
     }
     if (!list.length) sel.innerHTML = '<option value="">No releases found</option>';
-    const latest = list.find((r) => !r.prerelease);
-    text('fw-state', !list.length ? 'No releases yet' : latest && latest.tag.replace(/^v/, '') !== data.running
-      ? latest.tag + ' is the latest release' : 'Up to date (' + data.running + ')');
+    // Alphas (develop builds) are suggested only to a bridge already running one; any can be picked.
+    const onAlpha = running.includes('-');
+    const newer = list.find((r) => (onAlpha || !r.prerelease) && cmpVersion(r.tag.replace(/^v/, ''), running) > 0);
+    if (newer) sel.value = newer.tag;
+    else if (list.some((r) => r.tag.replace(/^v/, '') === running)) sel.value = list.find((r) => r.tag.replace(/^v/, '') === running).tag;
+    text('fw-state', !list.length ? 'No releases yet' : newer ? newer.tag.replace(/^v/, '') + ' available' : 'Up to date (' + running + ')');
     fwShow();
   } catch (e) {
     fwLoaded = false;
