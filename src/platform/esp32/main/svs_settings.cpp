@@ -476,11 +476,15 @@ esp_err_t start_write(const std::vector<InputSettings> &want_in, std::string *er
 
 static bool valid_kind(const std::string &kind, bool output)
 {
-    static const char *IN[] = {"scart", "component", "vga", "svideo", "dterm"};
+    static const char *IN[] = {"", "scart", "component", "vga", "svideo", "dterm"};  // "": not set up yet
     static const char *OUT[] = {"scart", "component", "vga", "svideo", "bnc"};
-    for (const char *k : output ? OUT : IN) {
-        if (kind == k) {
-            return true;
+    if (output) {
+        for (const char *k : OUT) {
+            if (kind == k) return true;
+        }
+    } else {
+        for (const char *k : IN) {
+            if (kind == k) return true;
         }
     }
     return false;

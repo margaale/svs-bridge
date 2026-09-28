@@ -872,6 +872,9 @@ function face(kind, role, o) {
     body = [[36, 'V'], [64, 'H/CS'], [92, 'B'], [120, 'G'], [148, 'R']].map(([y, t]) =>
       `<rect x="49" y="${y - 2}" width="4" height="4" fill="#8A8E95"/><rect x="71" y="${y - 2}" width="4" height="4" fill="#8A8E95"/>` +
       `<circle cx="62" cy="${y}" r="10" fill="#B8BCC2" stroke="#7A7E85"/><circle cx="62" cy="${y}" r="6" fill="#1A1C20"/><circle cx="62" cy="${y}" r="1.6" fill="#C9A55A"/>` + lab(y, t)).join('');
+  } else if (kind === 'empty') {
+    body = '<rect x="36" y="40" width="52" height="110" rx="6" fill="none" stroke="#4A4F57" stroke-width="1.5" stroke-dasharray="4 4"/>' +
+      '<text x="62" y="102" font-size="20" fill="#5A5F68" text-anchor="middle">?</text>';
   } else if (kind === 'control') {
     body = '<rect x="101" y="82" width="7" height="36" rx="1.5" fill="#0B0C0E" stroke="#3A3D42" stroke-width="1.2"/>';
   } else if (kind === 'transcoder') {
@@ -904,16 +907,18 @@ function inputCount() {
 }
 
 function layoutInput(i) {
-  while (layout.inputs.length <= i) layout.inputs.push({kind: 'scart', name: ''});
+  while (layout.inputs.length <= i) layout.inputs.push({kind: '', name: ''});  // not set up yet
   return layout.inputs[i];
 }
 
-// What sits at input i: a V3 module the SVS recognised, or what was picked
+// What sits at input i: a V3 module the SVS recognised, what was picked, or
+// nothing yet (every input starts out unset: the bridge does not guess)
 function inputKind(i) {
   const v3 = cfg && cfg.snapshot && cfg.snapshot.v3[i];
   if (v3 && v3.scart) return {kind: 'scart', v3: true, name: 'SCART V3', short: 'SCART V3'};
   if (v3 && v3.vga) return {kind: 'vga', v3: true, name: 'VGA V3', short: 'VGA V3'};
-  const k = layoutInput(i).kind in IN_KINDS ? layoutInput(i).kind : 'scart';
+  const k = layoutInput(i).kind;
+  if (!(k in IN_KINDS)) return {kind: 'empty', v3: false, unset: true, name: 'Module not set', short: 'NOT SET'};
   return {kind: k, v3: false, name: IN_KINDS[k][0], short: IN_KINDS[k][1]};
 }
 
@@ -972,7 +977,7 @@ function renderStack() {
     const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
     return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
                     svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
-                    kind: k.short, dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
+                    kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
   }).join('');
   const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
@@ -1014,12 +1019,13 @@ function renderInspector() {
     const e = edits && edits[i], r = readSettings();
     const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
     const txFit = (t) => !!(snap && snap.transcoders[t]);
+    const needKind = 'Pick the module fitted here first';
     const module = k.v3
       ? `<div class="detected">${face(k.kind, 'in', {tag: 'V3'})}<div><b style="font-size:14px">${k.name} module</b>` +
         `<div class="small" style="color:#9FD8B4">Recognised by the SVS: V3 modules report themselves.</div></div></div>`
       : `<div class="pick" role="radiogroup" aria-label="Input module">` + Object.entries(IN_KINDS).map(([id, kk]) =>
           `<button type="button" role="radio" aria-checked="${id === k.kind}" data-kind="${id}">${face(id, 'in')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
-        `</div><span class="small">Only V3 modules report themselves; for the rest, pick what is fitted.</span>`;
+        `</div><span class="small${k.unset ? ' warn' : ''}">${k.unset ? 'Not set up yet: pick the module fitted in this slot.' : 'Only V3 modules report themselves; for the rest, pick what is fitted.'}</span>`;
     const codes = e ? e.ir : [];
     const irChanged = e && r && JSON.stringify(e.ir) !== JSON.stringify(r[i].ir);
     el.innerHTML = `<div class="insp-face">${face(k.kind, 'in', {lit, tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
@@ -1028,8 +1034,8 @@ function renderInspector() {
       `<span class="small">Shown in Home Assistant with the active input.</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
-      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : 'This module has no RGB to convert') +
-      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : 'This module has no YPbPr to convert') +
+      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : k.unset ? needKind : 'This module has no RGB to convert') +
+      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : k.unset ? needKind : 'This module has no YPbPr to convert') +
       optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', 'Only V3 SCART and V3 VGA modules') +
       optRow(i, 'sync_bypass', 'Sync bypass', k.v3 && k.kind === 'scart', 'Pass the console’s sync untouched', 'Only V3 SCART modules') +
       optRow(i, 'auto_profile', 'Auto profile', true, 'Send the scaler this input’s profile and IR codes when it comes on', '') +

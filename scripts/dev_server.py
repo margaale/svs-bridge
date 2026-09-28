@@ -80,11 +80,8 @@ svs_eeprom = {
 }
 settings = {"task": "idle", "phase": "", "progress": 0, "result": "", "result_ok": False,
             "result_of": "idle", "snapshot": None, "seq": 0, "read_at": 0}
-layout = {"inputs": [{"kind": "scart", "name": "Super Nintendo"}, {"kind": "scart", "name": "Mega Drive"},
-                     {"kind": "scart", "name": "PlayStation"}, {"kind": "component", "name": "PlayStation 2"},
-                     {"kind": "component", "name": "GameCube"}, {"kind": "vga", "name": "Dreamcast"},
-                     {"kind": "svideo", "name": "Nintendo 64"}, {"kind": "dterm", "name": "Saturn"}],
-          "outputs": [{"kind": "component", "name": "RetroTINK 4K"}, {"kind": "scart", "name": "Sony PVM"}]}
+# A bridge set up for the first time: no module picked, no outputs
+layout = {"inputs": [], "outputs": []}
 
 
 def settings_json():
