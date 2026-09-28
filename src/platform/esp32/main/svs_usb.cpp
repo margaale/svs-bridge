@@ -138,6 +138,65 @@ std::vector<LogEntry> log_since(uint32_t after, size_t max)
 }
 
 // ---------------------------------------------------------------------------
+// Raw receive tap (RFC 2217 clients)
+// ---------------------------------------------------------------------------
+//
+// Everything the SVS sends, byte for byte: the traffic log leaves out blank and repeated lines,
+// which a serial client (the official utility counts lines and waits for the 2 s heartbeat) needs.
+
+static const size_t TAP_SIZE = 2048;  // power of two
+static SemaphoreHandle_t s_tap_mutex = nullptr;
+static uint8_t s_tap[TAP_SIZE];
+static uint32_t s_tap_total = 0;      // bytes ever received; the newest is s_tap[(total - 1) % TAP_SIZE]
+
+static void tap_add(const uint8_t *data, size_t len)
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    for (size_t i = 0; i < len; i++) {
+        s_tap[s_tap_total++ % TAP_SIZE] = data[i];
+    }
+    xSemaphoreGive(s_tap_mutex);
+}
+
+uint32_t rx_head()
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    uint32_t head = s_tap_total;
+    xSemaphoreGive(s_tap_mutex);
+    return head;
+}
+
+size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max)
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    if (s_tap_total - pos > TAP_SIZE) {
+        pos = s_tap_total - TAP_SIZE;  // fell behind: the oldest bytes are gone
+    }
+    size_t n = 0;
+    while (pos != s_tap_total && n < max) {
+        buf[n++] = s_tap[pos++ % TAP_SIZE];
+    }
+    xSemaphoreGive(s_tap_mutex);
+    return n;
+}
+
+// The last firmware, current-input and total-inputs lines the SVS printed (guarded by s_dev_mutex)
+static std::string s_banner_fw, s_banner_current, s_banner_total;
+
+std::string banner()
+{
+    xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
+    std::string out;
+    for (const std::string *l : {&s_banner_fw, &s_banner_current, &s_banner_total}) {
+        if (!l->empty()) {
+            out += *l + "\r\n";
+        }
+    }
+    xSemaphoreGive(s_dev_mutex);
+    return out;
+}
+
+// ---------------------------------------------------------------------------
 // USB callbacks
 // ---------------------------------------------------------------------------
 
@@ -242,14 +301,19 @@ static void parse_line(const std::string &line)
     switch (p.kind) {
     case LineKind::Firmware:
         s_info.firmware = line;
+        s_banner_fw = line;
         s_info.live = true;
         s_info.boots_seen++;
         break;
     case LineKind::InputChange:
+        if (line.rfind("SVS CURRENT", 0) == 0) {
+            s_banner_current = line;
+        }
         s_info.current_input = p.value;
         s_info.inputs_live = true;
         break;
     case LineKind::TotalInputs:
+        s_banner_total = line;
         s_info.total_inputs = p.value;
         s_info.inputs_live = true;
         break;
@@ -269,6 +333,9 @@ static void rx_print_task(void *arg)
     std::string parsed;  // printable characters only, for parse_line()
     while (true) {
         size_t n = xStreamBufferReceive(s_rx_stream, buf, sizeof(buf), pdMS_TO_TICKS(50));
+        if (n > 0) {
+            tap_add(buf, n);
+        }
 #if CONFIG_SVS_HEX_DUMP
         if (n > 0) {
             std::string hex;
@@ -421,6 +488,9 @@ static void device_task(void *arg)
         xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
         s_dev = nullptr;
         s_info.firmware.clear();
+        s_banner_fw.clear();
+        s_banner_current.clear();
+        s_banner_total.clear();
         s_info.current_input = -1;
         s_info.total_inputs = -1;
         s_info.live = false;
@@ -443,6 +513,7 @@ void start()
     s_rx_stream = xStreamBufferCreate(4096, 1);
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
+    s_tap_mutex = xSemaphoreCreateMutex();
     s_answers = xQueueCreate(8, sizeof(Answer));
     s_query_mutex = xSemaphoreCreateMutex();
     s_capture_mutex = xSemaphoreCreateMutex();
@@ -548,6 +619,21 @@ static esp_err_t do_send(const std::string &cmd, bool log)
 esp_err_t send(const std::string &cmd)
 {
     return do_send(cmd);
+}
+
+esp_err_t send_raw(const uint8_t *data, size_t len)
+{
+    xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
+    if (s_dev == nullptr || s_raw) {
+        xSemaphoreGive(s_dev_mutex);
+        return s_raw ? ESP_ERR_NOT_ALLOWED : ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t err = s_dev->tx_blocking(const_cast<uint8_t *>(data), len, 1000);
+    xSemaphoreGive(s_dev_mutex);
+    if (err != ESP_OK) {
+        log_add('*', std::string("Could not send to the SVS: ") + esp_err_to_name(err));
+    }
+    return err;
 }
 
 // ---------------------------------------------------------------------------

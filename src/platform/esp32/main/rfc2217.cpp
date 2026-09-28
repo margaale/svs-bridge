@@ -10,6 +10,7 @@
 #include "lwip/sockets.h"
 
 #include "rfc2217_proto.h"
+#include "svs_settings.h"
 #include "svs_usb.h"
 
 #define RFC2217_PORT          2217
@@ -18,7 +19,6 @@
 #define MAX_CLIENTS           3
 #define TICK_MS               20
 #define CLIENT_LINE_MAX       128
-#define LINE_IDLE_MS          50  // a line without "\n" (just "\r") goes out after this pause
 #define KEEPALIVE_IDLE_S      30  // TCP keepalive (see add_client)
 #define KEEPALIVE_INTERVAL_S  5
 #define KEEPALIVE_COUNT       3
@@ -37,13 +37,11 @@ struct client_t {
     uint32_t rx, tx;               // bytes received from / sent to it
     uint32_t commands, refused;    // lines sent to the SVS / not sent (SVS not connected, ...)
     rfc2217_t proto;
-    uint32_t seq;                  // last traffic-log entry sent to it (svs_usb::log_since)
+    uint32_t rx_pos;               // how far into what the SVS sent (svs_usb::rx_since) it has been given
     int modem_sent;                // modem state last announced (-1: not yet)
-    // Lines go to the SVS whole, as the console does: bytes trickling in separately would be sent as
-    // several commands.
+    // What it types, for the traffic log only (the bytes themselves go to the SVS as they come)
     uint8_t line[CLIENT_LINE_MAX];
     size_t line_len;
-    int64_t line_last_ms;
 };
 
 static client_t clients[MAX_CLIENTS];
@@ -128,30 +126,35 @@ static void drop_client(client_t *c, const char *why) {
     c->ip[0] = 0;
 }
 
-// A whole line from the client, sent to the SVS like a command from the web UI.
-static void flush_line(client_t *c) {
+// A line the client typed, in the traffic log (it has already gone to the SVS)
+static void log_line(client_t *c) {
     size_t start = 0, end = c->line_len;
     while (start < end && (c->line[start] == '\r' || c->line[start] == '\n')) start++;
     while (end > start && (c->line[end - 1] == '\r' || c->line[end - 1] == '\n')) end--;
     c->line_len = 0;
     if (end == start) return;
-    const std::string cmd((const char *)c->line + start, end - start);
-    const esp_err_t err = svs_usb::send(cmd);
-    (err == ESP_OK ? c->commands : c->refused)++;
-    const char *why = err == ESP_OK                  ? nullptr
-                      : err == ESP_ERR_INVALID_STATE ? "SVS not connected"
-                      : err == ESP_ERR_NOT_ALLOWED   ? "SVS firmware update in progress"
-                                                     : "send error";
-    if (why) note(c, std::string("not sent to the SVS (") + why + "): " + cmd);
-    if (why && !send_text(c, std::string("(") + why + ", not sent: " + cmd + ")\r\n")) drop_client(c, "failed");
+    c->commands++;
+    note(c, "to the SVS: " + std::string((const char *)c->line + start, end - start));
 }
 
+// Bytes from the client go to the SVS as they come, like a serial cable: the SVS's own tools send
+// blank lines and pairs of terminators and count the answers, so nothing is regrouped or trimmed.
 static void from_client(client_t *c, const uint8_t *data, size_t len) {
-    for (size_t i = 0; i < len && c->fd >= 0; i++) {
-        c->line[c->line_len++] = data[i];
-        if (data[i] == '\n' || c->line_len == sizeof(c->line)) flush_line(c);
+    const esp_err_t err = svs_settings::busy() ? ESP_ERR_NOT_ALLOWED : svs_usb::send_raw(data, len);
+    if (err != ESP_OK) {
+        c->refused++;
+        note(c, std::string("not sent to the SVS (") +
+                    (err == ESP_ERR_INVALID_STATE ? "SVS not connected"
+                     : err == ESP_ERR_NOT_ALLOWED ? "SVS busy: settings or firmware update in progress"
+                                                  : "send error") +
+                    "): " + describe(data, len));
+        c->line_len = 0;
+        return;
     }
-    c->line_last_ms = now_ms();
+    for (size_t i = 0; i < len; i++) {
+        if (c->line_len < sizeof(c->line)) c->line[c->line_len++] = data[i];
+        if (data[i] == '\n' || c->line_len == sizeof(c->line)) log_line(c);
+    }
 }
 
 static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, size_t size) {
@@ -181,7 +184,6 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     inet_ntoa_r(peer->sin_addr, c->ip, sizeof(c->ip));
     c->port = ntohs(peer->sin_port);
     rfc2217_init(&c->proto);
-    c->seq = svs_usb::log_head();  // from now on, not what came before
     c->modem_sent = -1;
     c->line_len = 0;
     const size_t n = rfc2217_greeting(&c->proto, buf, size);
@@ -193,6 +195,11 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
         snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected); offered: ", (unsigned)c->port,
                  connected_count(), MAX_CLIENTS);
         note(c, b + describe(buf, n));
+        // What the SVS said when it started (firmware, inputs): a client that opens the port later
+        // (the official utility does, to read the banner) would otherwise wait for a restart.
+        const std::string banner = svs_usb::banner();
+        c->rx_pos = svs_usb::rx_head();
+        if (!banner.empty() && !send_text(c, banner)) drop_client(c, "failed");
     }
 }
 
@@ -261,7 +268,6 @@ static void rfc2217_task(void *param) {
                 if (io.data_len) from_client(c, data, io.data_len);
                 if (c->fd < 0) continue;
             }
-            if (c->line_len && now_ms() - c->line_last_ms >= LINE_IDLE_MS) flush_line(c);
             if (c->fd < 0) continue;
 
             // The modem state, announced at connect and on every change.
@@ -274,11 +280,10 @@ static void rfc2217_task(void *param) {
                 c->modem_sent = modem;
             }
 
-            // What the SVS says (the web UI's traffic log, '<' entries), one line each.
-            for (const auto &e : svs_usb::log_since(c->seq, 16)) {
-                c->seq = e.seq;
-                if (e.dir != '<') continue;
-                if (!send_text(c, e.text + "\r\n")) {
+            // What the SVS says, byte for byte.
+            uint8_t raw[128];
+            for (size_t n; (n = svs_usb::rx_since(c->rx_pos, raw, sizeof(raw))) > 0;) {
+                if (!send_text(c, std::string((const char *)raw, n))) {
                     drop_client(c, "failed");
                     break;
                 }

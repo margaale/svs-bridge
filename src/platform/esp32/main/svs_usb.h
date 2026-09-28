@@ -48,6 +48,10 @@ esp_err_t restart_svs();
 // while a firmware update holds the link.
 esp_err_t send(const std::string &cmd);
 
+// Writes bytes to the SVS exactly as given (no line ending added, not logged): for a serial client
+// such as an RFC 2217 one. Same errors as send().
+esp_err_t send_raw(const uint8_t *data, size_t len);
+
 // --- Settings sessions ---------------------------------------------------------
 //
 // Reading and writing the SVS's settings (see svs_settings.h) sends hundreds of
@@ -87,6 +91,16 @@ uint32_t log_head();
 
 // Entries with seq > after (at most max), oldest first
 std::vector<LogEntry> log_since(uint32_t after, size_t max);
+
+// Everything the SVS sends, byte for byte (the log above drops blank and repeated lines).
+// rx_head() is where "from now on" starts; rx_since() copies up to max bytes from `pos` and moves it
+// on (a reader that falls more than ~2 KB behind loses the oldest bytes).
+uint32_t rx_head();
+size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max);
+
+// The last firmware, current-input and total-inputs lines the SVS printed, each ended
+// with CRLF ("" if it has said nothing since it was plugged in): what a client that connects later missed.
+std::string banner();
 
 // Adds a link event ('*') to the log, e.g. from the firmware updater
 void log_note(const std::string &text);
