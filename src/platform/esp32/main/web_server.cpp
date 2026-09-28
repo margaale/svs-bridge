@@ -21,6 +21,7 @@
 #include "auth.h"
 #include "bridge_fw_repo.h"
 #include "cruller.h"
+#include "rfc2217.h"
 #include "factory_reset.h"
 #include "svs_flasher.h"
 #include "svs_fw_repo.h"
@@ -277,6 +278,35 @@ static esp_err_t status_get(httpd_req_t *req)
     tls["fingerprint"] = tls_cert::fingerprint();
 
     add_svs_info(doc["svs"].to<JsonObject>());
+
+    return send_json(req, doc);
+}
+
+// RFC 2217 clients (the SVS's serial console over the network): who is connected and what each has
+// done. Admin only, unlike /api/status: it names addresses on the network.
+// {"port", "max", "clients": [{"ip", "port", "connected_s", "idle_s", "rx", "tx", "commands", "refused"}]}
+static esp_err_t clients_get(httpd_req_t *req)
+{
+    JsonDocument doc;
+    int max_clients = 0;
+    rfc2217_count(&max_clients);
+    JsonObject rfc = doc.to<JsonObject>();
+    rfc["port"] = 2217;
+    rfc["max"] = max_clients;
+    JsonArray list = rfc["clients"].to<JsonArray>();
+    rfc2217_info_t info[4];
+    const int n = rfc2217_info(info, 4);
+    for (int i = 0; i < n; i++) {
+        JsonObject c = list.add<JsonObject>();
+        c["ip"] = info[i].ip;
+        c["port"] = info[i].port;
+        c["connected_s"] = info[i].connected_s;
+        c["idle_s"] = info[i].idle_s;
+        c["rx"] = info[i].rx;
+        c["tx"] = info[i].tx;
+        c["commands"] = info[i].commands;
+        c["refused"] = info[i].refused;
+    }
 
     return send_json(req, doc);
 }
@@ -1329,6 +1359,7 @@ static const RouteEntry HTTPS_ROUTES[] = {
     {"/device/login", HTTP_POST, {login_post, Access::Public, false}},
     {"/device/logout", HTTP_POST, {logout_post, Access::Public, false}},
     {"/device/scan", HTTP_GET, {scan_get, Access::Admin, false}},
+    {"/device/clients", HTTP_GET, {clients_get, Access::Admin, false}},
     {"/device/cert", HTTP_GET, {cert_get, Access::Admin, false}},
     {"/device/wifi", HTTP_POST, {wifi_post, Access::Admin, false}},
     {"/device/ota", HTTP_POST, {ota_post, Access::Admin, false}},

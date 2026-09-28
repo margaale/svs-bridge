@@ -17,6 +17,7 @@
 //   POST /device/login            {"password"}
 //   POST /device/logout
 //   GET  /device/scan             [admin] nearby WiFi networks (JSON)
+//   GET  /device/clients          [admin] RFC 2217 clients connected, and what each has done (JSON)
 //   GET  /device/cert             [admin] server certificate (PEM)
 //   POST /device/wifi             [admin] {"ssid", "password"}
 //   POST /device/ota              [admin] raw firmware image (build/esp32/svs_bridge.bin)

@@ -130,6 +130,19 @@ bad update cannot leave a remote bridge unreachable. After restarting, the web
 UI tells whether the new version is running or was rolled back.
 
 
+## Serial console over the network (RFC 2217)
+
+The SVS's serial console is also on TCP port 2217 as an RFC 2217 server, for
+tools such as pyserial (`rfc2217://svs-bridge.local:2217`). Up to 3 clients
+share it: each sees what the SVS says, and the lines it sends go to the SVS
+like commands from the web UI, so in listen-only mode they are not sent.
+
+**Bridge** → **Serial console clients** lists who is connected: address,
+how long, when it last sent something, bytes both ways, and how many lines it
+sent to the SVS and how many were not sent. Every connection, what it sends
+(as hex and text) and why a line was not passed on also go to the SVS tab's
+serial log.
+
 ## Home Assistant
 
 The bridge exposes a small read-only API for Home Assistant, so automations can
