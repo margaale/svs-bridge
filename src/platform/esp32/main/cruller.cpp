@@ -13,6 +13,7 @@
 #include "nvs.h"
 #include "ArduinoJson.h"
 
+#include "svs_settings.h"
 #include "svs_usb.h"
 #include "wifi_manager.h"
 
@@ -30,6 +31,7 @@ static const int64_t RETRY_MS = 10 * 1000;      // after a report that did not g
 static const int64_t SCAN_MS = 30 * 1000;       // browse the network again
 static const int64_t FORGET_MS = 100 * 1000;    // drop a Cruller not heard of for this long
 static const int64_t ANNOUNCE_GAP_MS = 3000;    // announcements report at most this often
+static const int64_t DESCRIBE_MS = 1000;        // how often the switch's description is checked
 static const uint32_t QUERY_MS = 2000;
 static const size_t MAX_RESULTS = 16;
 static const int HTTP_TIMEOUT_MS = 4000;
@@ -175,8 +177,52 @@ void scan()
 // Reporting
 // ---------------------------------------------------------------------------
 
-// Sends the active input to Cruller c and fills r with the outcome
-static void report(const Found &c, const svs_usb::Info &info, Report &r)
+// The switch as the SVS tab sets it up, for Cruller: the SVS's firmware, each input and output with
+// its module and name (the layout), and the input settings read from the SVS, once they have been
+// read. An object: {"firmware", "inputs": [...], "outputs": [...]}.
+static std::string describe_switch(const svs_usb::Info &info)
+{
+    JsonDocument layout;
+    if (deserializeJson(layout, svs_settings::layout_json()) != DeserializationError::Ok) {
+        layout.clear();
+    }
+    const svs_settings::Snapshot sn = svs_settings::status().snapshot;
+    const int read = sn.valid ? sn.inputs : 0;
+
+    JsonDocument doc;
+    doc["firmware"] = info.firmware;
+    JsonArrayConst names = layout["inputs"].as<JsonArrayConst>();
+    JsonArray inputs = doc["inputs"].to<JsonArray>();
+    const int n = std::max((int)names.size(), read);
+    for (int i = 0; i < n; i++) {
+        JsonObjectConst l = names[i].as<JsonObjectConst>();
+        JsonObject o = inputs.add<JsonObject>();
+        o["kind"] = l["kind"] | "";
+        o["name"] = l["name"] | "";
+        if (i < read) {  // only what was read from the SVS: absent means not known
+            const svs_config::InputSettings &in = sn.settings[i];
+            o["auto_profile"] = in.auto_profile;
+            o["rgsb"] = in.rgsb;
+            o["sync_bypass"] = in.sync_bypass;
+            o["rgb_to_ypbpr"] = in.rgb_to_ypbpr;
+            o["ypbpr_to_rgb"] = in.ypbpr_to_rgb;
+            o["v3"] = (bool)sn.hardware.scart_v3[i] || (bool)sn.hardware.vga_v3[i];
+        }
+    }
+    JsonArray outputs = doc["outputs"].to<JsonArray>();
+    for (JsonObjectConst l : layout["outputs"].as<JsonArrayConst>()) {
+        JsonObject o = outputs.add<JsonObject>();
+        o["kind"] = l["kind"] | "";
+        o["name"] = l["name"] | "";
+    }
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
+// Sends the active input and the switch's description (describe_switch()) to Cruller c and fills r
+// with the outcome
+static void report(const Found &c, const svs_usb::Info &info, const std::string &described, Report &r)
 {
     r.attempted = true;
     r.ok = false;
@@ -194,7 +240,8 @@ static void report(const Found &c, const svs_usb::Info &info, Report &r)
     }
     std::string url = "http://" + host + ":" + std::to_string(c.port) + "/api/svs";
 
-    // The same names as the "svs" object of /api/v1/state, plus the bridge's id
+    // The same names as the "svs" object of /api/v1/state, plus the bridge's id, then the
+    // switch's description
     JsonDocument doc;
     doc["id"] = wifi_manager::device_id();
     doc["current_input"] = info.current_input;
@@ -204,6 +251,10 @@ static void report(const Found &c, const svs_usb::Info &info, Report &r)
     doc["live"] = info.inputs_live;
     std::string body;
     serializeJson(doc, body);
+    if (described.size() > 2) {  // {"a":1} + {"b":2} -> {"a":1,"b":2}
+        body.pop_back();
+        body += "," + described.substr(1);
+    }
 
     esp_http_client_config_t config = {};
     config.url = url.c_str();
@@ -261,6 +312,9 @@ static void task(void *arg)
     std::string sent_to;  // the Cruller last reported to; empty = report on finding it
     int sent_input = -1;
     int sent_total = -1;
+    std::string described;       // the switch's description, as last checked
+    std::string sent_described;  // ... and as last sent
+    int64_t next_describe = 0;
     bool was_connected = false;
     std::string last_error;  // logged once, not on every retry
 
@@ -306,19 +360,24 @@ static void task(void *arg)
         }
 
         int64_t now = now_ms();
+        if (now >= next_describe) {  // the layout edited, the SVS's settings read or saved
+            described = describe_switch(info);
+            next_describe = now + DESCRIBE_MS;
+        }
         bool due = sent_to != target.id || info.current_input != sent_input ||
-                   info.total_inputs != sent_total || now >= next_report ||
+                   info.total_inputs != sent_total || described != sent_described || now >= next_report ||
                    (announced && now - last_report >= ANNOUNCE_GAP_MS);
         if (!due) {
             continue;
         }
 
         Report r;
-        report(target, info, r);
+        report(target, info, described, r);
         bool changed = sent_to != target.id || info.current_input != sent_input;
         sent_to = target.id;
         sent_input = info.current_input;
         sent_total = info.total_inputs;
+        sent_described = described;
         last_report = now_ms();
         // Unreachable: retry sooner, and look it up again in case its address changed
         next_report = last_report + (r.http_status != 0 ? HEARTBEAT_MS : RETRY_MS);

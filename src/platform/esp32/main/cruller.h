@@ -6,11 +6,15 @@
 // its address, which is looked up again by id) and sends it, over plain HTTP:
 //
 //   POST http://<host>:<port>/api/svs
-//   {"id": "svs-bridge-...", "current_input": 3, "total_inputs": 8, "live": true}
+//   {"id": "svs-bridge-...", "current_input": 3, "total_inputs": 8, "live": true,
+//    "firmware": "SVS_FW_1.21",
+//    "inputs": [{"kind": "scart", "name": "Super Nintendo", "auto_profile": true, ...}],
+//    "outputs": [{"kind": "component", "name": "RetroTINK 4K"}]}
 //
-// on every input change, as soon as it finds the Cruller (also when it
-// announces itself again after a restart), and every 60 s in case a report was
-// lost. Cruller answers {"ok": true, "changed": bool}, or 409 when it is
+// on every input change, whenever the switch's description changes (the
+// layout, or the settings read from the SVS), as soon as it finds the Cruller
+// (also when it announces itself again after a restart), and every 60 s in case
+// a report was lost. Cruller answers {"ok": true, "changed": bool}, or 409 when it is
 // already paired with another SVS Bridge.
 //
 // Requires NVS and mDNS (wifi_manager::start()) to be initialized.

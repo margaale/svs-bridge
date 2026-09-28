@@ -157,13 +157,22 @@ network; pick the one on the RetroTINK this switch feeds. The bridge stores its
 POST http://<host>:<port>/api/svs
 Content-Type: application/json
 
-{"id": "svs-bridge-aabbccddeeff", "current_input": 3, "total_inputs": 8, "live": true}
+{"id": "svs-bridge-aabbccddeeff", "current_input": 3, "total_inputs": 8, "live": true,
+ "firmware": "SVS_FW_1.21",
+ "inputs": [{"kind": "scart", "name": "Super Nintendo", "auto_profile": true, "rgsb": false,
+             "sync_bypass": true, "rgb_to_ypbpr": false, "ypbpr_to_rgb": false, "v3": true}, ...],
+ "outputs": [{"kind": "component", "name": "RetroTINK 4K"}, ...]}
 ```
 
-on every input change, as soon as it finds the Cruller (also when it announces
-itself again after a restart), and every 60 s in case a report was lost (every
-10 s while it cannot reach it). Nothing is sent until the SVS has reported its
-input.
+on every input change, whenever the switch's description changes, as soon as it
+finds the Cruller (also when it announces itself again after a restart), and
+every 60 s in case a report was lost (every 10 s while it cannot reach it).
+Nothing is sent until the SVS has reported its input.
+
+The description is the SVS tab's: the layout (each input's and output's module
+and name; empty lists if none is saved), the SVS's firmware, and the input
+settings once they have been read from the SVS (until then, inputs carry only
+`kind` and `name`). Cruller shows it in its own SVS tab.
 
 A Cruller keeps the first bridge that reports to it and answers others with
 `409`; the tab then says it is paired with another bridge. Press **Unpair** in
