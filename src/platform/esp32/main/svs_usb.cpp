@@ -81,6 +81,10 @@ struct Answer {
 };
 static volatile bool s_session = false;
 static QueueHandle_t s_answers;
+// query_all(): every line received while capturing, guarded by s_capture_mutex
+static volatile bool s_capturing = false;
+static std::vector<std::string> s_captured;
+static SemaphoreHandle_t s_capture_mutex;
 static SemaphoreHandle_t s_query_mutex;
 
 static int64_t now_ms() { return esp_timer_get_time() / 1000; }
@@ -285,6 +289,13 @@ static void rx_print_task(void *arg)
             uint8_t c = buf[i];
             if (c == '\n' || c == '\r') {
                 if (!parsed.empty()) {
+                    if (s_capturing) {
+                        xSemaphoreTake(s_capture_mutex, portMAX_DELAY);
+                        if (s_captured.size() < 16) {
+                            s_captured.push_back(parsed);
+                        }
+                        xSemaphoreGive(s_capture_mutex);
+                    }
                     if (s_session && parsed.rfind("SVS", 0) != 0) {
                         Answer a = {};
                         strlcpy(a.text, parsed.c_str(), sizeof(a.text));
@@ -434,6 +445,7 @@ void start()
     s_log_mutex = xSemaphoreCreateMutex();
     s_answers = xQueueCreate(8, sizeof(Answer));
     s_query_mutex = xSemaphoreCreateMutex();
+    s_capture_mutex = xSemaphoreCreateMutex();
 
 
     // A one-time SVS reset on the first connection is still allowed after a cold
@@ -569,6 +581,30 @@ esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms
             err = ESP_ERR_TIMEOUT;
         }
     }
+    xSemaphoreGive(s_query_mutex);
+    return err;
+}
+
+esp_err_t query_all(const std::string &cmd, std::vector<std::string> &lines, uint32_t window_ms)
+{
+    // Only inside a session, which svs_settings starts after its own checks
+    if (!s_session) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(s_query_mutex, portMAX_DELAY);
+    xSemaphoreTake(s_capture_mutex, portMAX_DELAY);
+    s_captured.clear();
+    xSemaphoreGive(s_capture_mutex);
+    s_capturing = true;
+    esp_err_t err = do_send(cmd, false);
+    if (err == ESP_OK) {
+        vTaskDelay(pdMS_TO_TICKS(window_ms));
+    }
+    s_capturing = false;
+    xSemaphoreTake(s_capture_mutex, portMAX_DELAY);
+    lines = s_captured;
+    xSemaphoreGive(s_capture_mutex);
+    xQueueReset(s_answers);  // what it captured is not an answer to the next query
     xSemaphoreGive(s_query_mutex);
     return err;
 }

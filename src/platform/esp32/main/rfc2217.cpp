@@ -35,7 +35,7 @@ struct client_t {
     int64_t since_ms;              // connected at (the oldest is replaced when all are taken)
     int64_t last_rx_ms;            // last time it sent anything
     uint32_t rx, tx;               // bytes received from / sent to it
-    uint32_t commands, refused;    // lines sent to the SVS / not sent (listen-only mode, ...)
+    uint32_t commands, refused;    // lines sent to the SVS / not sent (SVS not connected, ...)
     rfc2217_t proto;
     uint32_t seq;                  // last traffic-log entry sent to it (svs_usb::log_since)
     int modem_sent;                // modem state last announced (-1: not yet)
@@ -210,9 +210,8 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     } else {
         printf("rfc2217: client %s connected\n", c->ip);
         char b[160];
-        snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected; %s); sent ", (unsigned)c->port,
-                 connected_count(), MAX_CLIENTS,
-                 svs_usb::send_allowed() ? "commands go to the SVS" : "listen-only: commands are not sent to the SVS");
+        snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected); sent ", (unsigned)c->port,
+                 connected_count(), MAX_CLIENTS);
         note(c, b + hex(buf, n) + " (Telnet options)");
     }
 }

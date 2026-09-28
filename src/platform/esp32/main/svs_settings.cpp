@@ -28,12 +28,9 @@ static const uint32_t ANSWER_TIMEOUT_MS = 800;
 static const int ATTEMPTS = 2;
 static const uint32_t WRITE_GAP_MS = 60;         // the utility waits 50 ms after each W
 static const uint32_t INPUT_CHANGE_TIMEOUT_MS = 3000;
-// After a transcoder command: how long the SVS gets before the check, and how
-// often the check is tried (the SVS may answer the command itself first, or
-// apply it a moment later)
+// After a transcoder command: how long the SVS gets before the check
 static const uint32_t TX_SETTLE_MS = 300;
-static const int TX_CHECKS = 5;
-static const uint32_t TX_CHECK_GAP_MS = 200;
+static const uint32_t TX_ANSWER_WINDOW_MS = 600;  // how long every line after Y/G is collected
 static const size_t MAX_LAYOUT = 3900;  // NVS strings take up to 4000 bytes
 static const size_t MAX_NAME = 32;
 static const size_t MAX_DEVICE = 16;
@@ -122,6 +119,39 @@ static std::string no_answer(const std::string &cmd)
            ". Is the RetroTINK's HD-15 still plugged in? It must be unplugged to read or save settings.";
 }
 
+// Every line the SVS sent after a command, quoted, for the serial log
+static std::string quoted(const std::vector<std::string> &lines)
+{
+    if (lines.empty()) {
+        return "nothing";
+    }
+    std::string out;
+    for (const auto &l : lines) {
+        out += (out.empty() ? "\"" : " | \"") + l + "\"";
+    }
+    return out;
+}
+
+// The first line that is only a number (spaces aside), -1 if none
+static int bare_number(const std::vector<std::string> &lines)
+{
+    for (const auto &l : lines) {
+        int v = -1;
+        bool other = false;
+        for (char c : l) {
+            if (c >= '0' && c <= '9') {
+                v = (v < 0 ? 0 : v * 10) + (c - '0');
+            } else if (c != ' ') {
+                other = true;
+            }
+        }
+        if (!other && v >= 0 && v <= 255) {
+            return v;
+        }
+    }
+    return -1;
+}
+
 // Why a read cannot start now, "" if it can
 static std::string read_blocker()
 {
@@ -173,6 +203,15 @@ static void read_task(void *arg)
     }
     r.hardware = decode_hardware(r.eeprom, inputs);
     r.settings.assign(inputs, InputSettings());
+
+    // What Y/G answer, exactly, on input 1: their format is not known for sure
+    // (a real SVS answered Y4 with a line holding "4"), so it goes to the log
+    for (auto t : {std::make_pair(r.hardware.tx_rgb_to_ypbpr, "Y1"), std::make_pair(r.hardware.tx_ypbpr_to_rgb, "G1")}) {
+        std::vector<std::string> lines;
+        if (t.first && svs_usb::query_all(t.second, lines, TX_ANSWER_WINDOW_MS) == ESP_OK) {
+            svs_usb::log_note(std::string("Read: ") + t.second + " answered " + quoted(lines));
+        }
+    }
 
     // Which inputs each fitted transcoder is on for (0 = on)
     for (int n = 1; n <= inputs; n++) {
@@ -303,8 +342,11 @@ static void write_task(void *arg)
     }
 
     // The transcoders, then back to the input that was on screen. Each step
-    // goes to the serial log, so a failure shows what the SVS answered.
-    std::string failed;
+    // goes to the serial log with every line the SVS sent after the check, as
+    // its answer's format is not known for sure. The command itself works (a
+    // real SVS turned the transcoder on while its Y4 answer read "4"), so an
+    // answer that does not confirm it is reported, not taken as a failure.
+    std::string failed, unconfirmed;
     if (!tx.empty()) {
         int prev = svs_usb::info().current_input;
         for (auto &t : tx) {
@@ -324,21 +366,14 @@ static void write_task(void *arg)
                 break;
             }
             vTaskDelay(pdMS_TO_TICKS(TX_SETTLE_MS));
-            int v = -1;
-            bool ok = false;
-            for (int k = 0; k < TX_CHECKS && !ok; k++) {
-                if (k > 0) {
-                    vTaskDelay(pdMS_TO_TICKS(TX_CHECK_GAP_MS));
-                }
-                ok = ask_byte(check, v) && (v == 0) == t.on;
-            }
+            std::vector<std::string> lines;
+            svs_usb::query_all(check, lines, TX_ANSWER_WINDOW_MS);
+            int v = bare_number(lines);
+            bool confirmed = v >= 0 && (v == 0) == t.on;
             svs_usb::log_note("Transcoder: input " + n + ": " + cmd + ", then " + check + " answered " +
-                              (v < 0 ? std::string("nothing") : std::to_string(v)) + " (0 = on)" +
-                              (ok ? "" : ": not changed"));
-            if (!ok) {
-                failed = "The transcoder of input " + n + " did not change (" + check + " answered " +
-                         (v < 0 ? std::string("nothing") : std::to_string(v)) + " after " + cmd + ").";
-                break;
+                              quoted(lines) + (confirmed ? " (confirmed)" : " (not confirmed; 0 = on)"));
+            if (!confirmed) {
+                unconfirmed += (unconfirmed.empty() ? "" : ", ") + n;
             }
             (t.rgb_to_ypbpr ? r.settings[t.input - 1].rgb_to_ypbpr : r.settings[t.input - 1].ypbpr_to_rgb) = t.on;
         }
@@ -362,7 +397,12 @@ static void write_task(void *arg)
     char buf[96];
     snprintf(buf, sizeof(buf), "Saved to the SVS: %u bytes and %u transcoder settings",
              (unsigned)writes.size(), (unsigned)tx.size());
-    finish(writes.empty() && tx.empty() ? "Nothing to save: the SVS already has these settings" : buf, true);
+    std::string done = writes.empty() && tx.empty() ? "Nothing to save: the SVS already has these settings" : buf;
+    if (!unconfirmed.empty()) {
+        done += ". The SVS did not confirm the transcoder of input " + unconfirmed +
+                ": check it on the SVS (its answer is in the serial log).";
+    }
+    finish(done, true);
     vTaskDelete(NULL);
 }
 

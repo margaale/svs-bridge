@@ -135,7 +135,7 @@ UI tells whether the new version is running or was rolled back.
 The SVS's serial console is also on TCP port 2217 as an RFC 2217 server, for
 tools such as pyserial (`rfc2217://svs-bridge.local:2217`). Up to 3 clients
 share it: each sees what the SVS says, and the lines it sends go to the SVS
-like commands from the web UI, so in listen-only mode they are not sent.
+like commands from the web UI (they reach it only with the HD-15 unplugged).
 
 **Bridge** → **Serial console clients** lists who is connected: address,
 how long, when it last sent something, bytes both ways, and how many lines it
