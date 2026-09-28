@@ -42,21 +42,14 @@ jobs:
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "SVS Bridge $v (build $GITHUB_RUN_NUMBER)"
 
-  # The pure logic (reset-vector patch, Intel HEX decoder, SVS line parsing), on the host.
+  # src/core's pure logic (reset-vector patch, Intel HEX decoder, SVS line parsing), on the host.
   tests:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - name: Build and run
-        run: |
-          set -e
-          for t in svs_vectors svs_hex svs_protocol; do
-            echo "== $t =="
-            g++ -std=c++17 -Wall -Wextra -Werror -Imain -o "test_$t" "test/host/test_$t.cpp"
-            "./test_$t"
-          done
+      - run: bash tests/run.sh
 
-  # ESP32-S3 (N16R8): ESP-IDF in Espressif's container.
+  # Espressif ESP32 boards: ESP-IDF in Espressif's container, target src/platform/esp32.
   esp32:
     needs: version
     runs-on: ubuntu-24.04
@@ -64,9 +57,6 @@ jobs:
       BOARD: esp32s3_n16r8
     steps:
       - uses: actions/checkout@v7
-
-      # ESP-IDF reads version.txt for the app version; written here, never committed.
-      - run: echo "${{ needs.version.outputs.version }}" > version.txt
 
       # ESP-IDF compiles through ccache: keep its directory between runs (inside the workspace, which
       # the container mounts), so only what changed is compiled again.
@@ -77,7 +67,6 @@ jobs:
           key: ccache-esp32s3-${{ env.ESP_IDF_VERSION }}-${{ github.sha }}
           restore-keys: ccache-esp32s3-${{ env.ESP_IDF_VERSION }}-
 
-      # A new board over USB: bootloader, partition table, OTA data and app in one file, at 0x0.
       - name: Build
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -85,7 +74,8 @@ jobs:
           target: esp32s3
           extra_docker_args: >-
             -e CCACHE_DIR=/app/${{ github.repository }}/.ccache -e IDF_CCACHE_ENABLE=1
-          command: idf.py build && idf.py merge-bin -o "$PWD/build/svs_bridge-factory.bin" && ccache -s
+            -e SVS_BRIDGE_VERSION=${{ needs.version.outputs.version }}
+          command: bash scripts/build.sh esp32 && ccache -s
 
       # Named as released: svs-bridge-<version>-<board>-<file>.
       - name: Name the images
@@ -93,8 +83,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           mkdir dist
-          for f in build/svs_bridge.bin build/svs_bridge-factory.bin build/bootloader/bootloader.bin \
-                   build/partition_table/partition-table.bin build/ota_data_initial.bin; do
+          for f in build/esp32/svs_bridge.bin build/esp32/svs_bridge-factory.bin build/esp32/bootloader/bootloader.bin \
+                   build/esp32/partition_table/partition-table.bin build/esp32/ota_data_initial.bin; do
             cp "$f" "dist/svs-bridge-${VERSION}-${BOARD}-$(basename "$f")"
           done
           ls -l dist

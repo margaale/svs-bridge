@@ -19,7 +19,7 @@
 //   GET  /device/scan             [admin] nearby WiFi networks (JSON)
 //   GET  /device/cert             [admin] server certificate (PEM)
 //   POST /device/wifi             [admin] {"ssid", "password"}
-//   POST /device/ota              [admin] raw firmware image (build/svs_bridge.bin)
+//   POST /device/ota              [admin] raw firmware image (build/esp32/svs_bridge.bin)
 //   GET  /device/releases         [admin] the bridge's own GitHub releases (JSON)
 //   POST /device/ota/github       [admin] {"tag"}: download that release and update
 //   POST /device/reboot           [admin]

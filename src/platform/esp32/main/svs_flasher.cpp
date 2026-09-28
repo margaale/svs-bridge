@@ -133,7 +133,7 @@ static std::string wait_for_banner(uint32_t boots_before)
 // ---------------------------------------------------------------------------
 
 // Intel HEX decoding lives in svs_hex.h (dependency-free, unit-tested on the
-// host; see test/host/test_svs_hex.cpp). decode_hex() is called below with
+// host; see tests/test_svs_hex.cpp). decode_hex() is called below with
 // FLASH_SIZE as the maximum image size.
 using svs_hex::decode_hex;
 
@@ -331,7 +331,7 @@ static void read_boot_info(BootInfo &bi)
 //
 // The pure opcode/patch math lives in svs_vectors.h (brought into scope with
 // the `using namespace svs_vectors` above) so it can be unit-tested on the host
-// without ESP-IDF. See test/host/test_svs_vectors.cpp.
+// without ESP-IDF. See tests/test_svs_vectors.cpp.
 // ---------------------------------------------------------------------------
 
 static bool same_bootloader(const BootInfo &a, const BootInfo &b)

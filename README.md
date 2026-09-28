@@ -83,7 +83,7 @@ HTTPS.
 ## Firmware updates (OTA)
 
 In the web UI, **Bridge** → **Bridge firmware**: pick a release and **Download and
-install**, or **Install from a file…** with `build/svs_bridge.bin` (the page
+install**, or **Install from a file…** with `build/esp32/svs_bridge.bin` (the page
 shows its version, build date and SHA-256 before anything is sent). The image is checked again on the bridge (ESP-IDF app,
 ESP32-S3, project `svs_bridge`, checksum) before it switches to it.
 
@@ -112,28 +112,45 @@ automatically.
 The matching custom integration (HACS) is in a separate repository:
 [margaale/svs-bridge-hacs](https://github.com/margaale/svs-bridge-hacs).
 
+## Source layout
+
+The same layout as [Cruller](https://github.com/margaale/Cruller):
+
+- `src/core`: the pure logic, with no ESP-IDF — the AVR reset-vector patch
+  (`svs_vectors.h`), the Intel HEX decoder (`svs_hex.h`) and the SVS line parsing
+  (`svs_protocol.h`).
+- `src/platform/esp32`: the ESP32-S3 target, an ESP-IDF project (`sdkconfig.defaults`,
+  `partitions.csv`, `dependencies.lock`); its code in `main/`.
+- `src/web`: the main page and the setup portal, and `embed.cmake`, which turns
+  them into C arrays at build time.
+- `src/version.cmake`: the version of local builds.
+- `tests`: host unit tests of `src/core`. `scripts`: `build.sh` and the web UI's
+  `dev_server.py`.
+
 ## Build and flash
 
-Requires ESP-IDF v6.x (developed with v6.1). From VS Code with the ESP-IDF
-extension, or in a shell with ESP-IDF activated:
+Requires ESP-IDF v6.x (developed with v6.1). In a shell with ESP-IDF activated:
 
 ```
-idf.py build
-idf.py -p COMx flash monitor
+scripts/build.sh esp32
+idf.py -C src/platform/esp32 -B build/esp32 -p COMx flash monitor
 ```
 
-Options live under `idf.py menuconfig` → **SVS Bridge** (serial settings,
-hostname, setup network password).
+The build goes to `build/esp32`, with `svs_bridge-factory.bin` to flash a new
+board at 0x0. Options live under
+`idf.py -C src/platform/esp32 -B build/esp32 menuconfig` → **SVS Bridge** (serial
+settings, hostname, setup network password).
+
+To work on the web UI without a board, `python scripts/dev_server.py` serves the
+pages with a mocked device API.
 
 ## Tests and CI
 
-The pure logic that must never regress — the AVR reset-vector patch, the Intel
-HEX decoder and the SVS line parsing — lives in dependency-free headers
-(`main/svs_vectors.h`, `main/svs_hex.h`, `main/svs_protocol.h`) and is
-unit-tested on the host, with no ESP-IDF or hardware:
+The pure logic that must never regress lives in dependency-free headers in
+`src/core` and is unit-tested on the host, with no ESP-IDF or hardware:
 
 ```
-g++ -std=c++17 -Wall -Wextra -Imain -o t test/host/test_svs_vectors.cpp && ./t
+tests/run.sh
 ```
 
 ## Releases
@@ -160,9 +177,9 @@ over USB at 0x0, and the bootloader, partition table and OTA data are there for
 a flash in parts. Each release also carries a plain `svs_bridge.bin`, the name
 bridges on 0.1.x look for when updating from GitHub.
 
-CI writes the version to `version.txt` before building; a local build without
-one takes it from `git describe`.
+CI passes the version to the build (`SVS_BRIDGE_VERSION`); a local build takes
+it from `src/version.cmake`.
 
 ## Flash layout
 
-Two 6 MB OTA app slots plus a spare storage partition (see `partitions.csv`).
+Two 6 MB OTA app slots plus a spare storage partition (see `src/platform/esp32/partitions.csv`).

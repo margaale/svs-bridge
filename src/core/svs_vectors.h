@@ -6,7 +6,7 @@
 // writes are identical to what the official tool writes.
 //
 // Everything here is pure integer/opcode arithmetic with no ESP-IDF or hardware
-// dependency, so it is unit-tested on the host (see test/host/test_svs_vectors).
+// dependency, so it is unit-tested on the host (see tests/test_svs_vectors).
 // Keep it that way: no logging, no I/O, no globals.
 #pragma once
 

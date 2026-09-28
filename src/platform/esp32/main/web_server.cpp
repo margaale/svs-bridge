@@ -36,10 +36,11 @@ static const size_t MAX_SVS_HEX = 256 * 1024;  // official SVS .hex files are ~8
 static const size_t OTA_CHUNK = 16384;  // one full TLS record per read
 static const char *PORTAL_URL = "http://192.168.4.1/";
 
-extern "C" const char index_html_start[] asm("_binary_index_html_start");
-extern "C" const char index_html_end[] asm("_binary_index_html_end");
-extern "C" const char portal_html_start[] asm("_binary_portal_html_start");
-extern "C" const char portal_html_end[] asm("_binary_portal_html_end");
+// The pages, from src/web (embedded by src/web/embed.cmake)
+extern "C" const unsigned char web_index_html[];
+extern "C" const size_t web_index_html_len;
+extern "C" const unsigned char web_portal_html[];
+extern "C" const size_t web_portal_html_len;
 
 static const char *SESSION_COOKIE = "svs_session";
 
@@ -183,21 +184,21 @@ static void schedule_reboot()
 // Handlers
 // ---------------------------------------------------------------------------
 
-static esp_err_t send_html(httpd_req_t *req, const char *start, const char *end)
+static esp_err_t send_html(httpd_req_t *req, const unsigned char *page, size_t len)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, start, end - start);
+    return httpd_resp_send(req, reinterpret_cast<const char *>(page), len);
 }
 
 static esp_err_t index_get(httpd_req_t *req)
 {
-    return send_html(req, index_html_start, index_html_end);
+    return send_html(req, web_index_html, web_index_html_len);
 }
 
 static esp_err_t portal_get(httpd_req_t *req)
 {
-    return send_html(req, portal_html_start, portal_html_end);
+    return send_html(req, web_portal_html, web_portal_html_len);
 }
 
 // What the SVS reported in its last boot banner (null when unknown)
