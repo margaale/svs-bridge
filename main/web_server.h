@@ -36,6 +36,9 @@
 //   POST /device/svs/firmware     [admin] step 2: stage an uploaded .hex (body: the file)
 //   POST /device/svs/firmware/official  [admin] step 2: {"name"}, download and stage a release
 //   POST /device/svs/firmware/flash     [admin] step 3: flash the staged firmware
+//   GET  /device/cruller          [admin] Crullers found (mDNS), the chosen one, last report
+//   POST /device/cruller/scan     [admin] browse for Crullers again, then as GET
+//   POST /device/cruller/select   [admin] {"id"}: report the active input to it ("" = none)
 //
 // While the SVS is being flashed, OTA, reboot and factory reset are refused.
 //

@@ -10,6 +10,7 @@ idf_component_register(SRCS "main.cpp"
                             "svs_flasher.cpp"
                             "svs_fw_repo.cpp"
                             "bridge_fw_repo.cpp"
+                            "cruller.cpp"
                        INCLUDE_DIRS "."
                        EMBED_FILES "web/index.html" "web/portal.html"
                        PRIV_REQUIRES app_update
