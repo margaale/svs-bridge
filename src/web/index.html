@@ -209,7 +209,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 </div>
 
 <div class="panel span3">
-<div class="row"><h2 class="grow">Your switch</h2><span class="small hide-sm" id="stack-hint">Drag a module to move it: inputs among inputs, outputs among outputs</span></div>
+<div class="row"><h2 class="grow">Your switch</h2><span class="small hide-sm" id="stack-hint">Drag a module to move it: inputs among inputs; outputs and transcoders among outputs</span></div>
 <div class="note warn" id="stack-warn" hidden></div>
 <div class="stack-row" id="stack"></div>
 <div class="msg" id="layout-msg"></div>
@@ -872,6 +872,9 @@ function face(kind, role, o) {
     body = [[36, 'V'], [64, 'H/CS'], [92, 'B'], [120, 'G'], [148, 'R']].map(([y, t]) =>
       `<rect x="49" y="${y - 2}" width="4" height="4" fill="#8A8E95"/><rect x="71" y="${y - 2}" width="4" height="4" fill="#8A8E95"/>` +
       `<circle cx="62" cy="${y}" r="10" fill="#B8BCC2" stroke="#7A7E85"/><circle cx="62" cy="${y}" r="6" fill="#1A1C20"/><circle cx="62" cy="${y}" r="1.6" fill="#C9A55A"/>` + lab(y, t)).join('');
+  } else if (kind === 'empty') {
+    body = '<rect x="36" y="40" width="52" height="110" rx="6" fill="none" stroke="#4A4F57" stroke-width="1.5" stroke-dasharray="4 4"/>' +
+      '<text x="62" y="102" font-size="20" fill="#5A5F68" text-anchor="middle">?</text>';
   } else if (kind === 'control') {
     body = '<rect x="101" y="82" width="7" height="36" rx="1.5" fill="#0B0C0E" stroke="#3A3D42" stroke-width="1.2"/>';
   } else if (kind === 'transcoder') {
@@ -904,20 +907,54 @@ function inputCount() {
 }
 
 function layoutInput(i) {
-  while (layout.inputs.length <= i) layout.inputs.push({kind: 'scart', name: ''});
+  while (layout.inputs.length <= i) layout.inputs.push({kind: '', name: ''});  // not set up yet
   return layout.inputs[i];
 }
 
-// What sits at input i: a V3 module the SVS recognised, or what was picked
+// What sits at input i: a V3 module the SVS recognised, what was picked, or
+// nothing yet (every input starts out unset: the bridge does not guess)
 function inputKind(i) {
   const v3 = cfg && cfg.snapshot && cfg.snapshot.v3[i];
   if (v3 && v3.scart) return {kind: 'scart', v3: true, name: 'SCART V3', short: 'SCART V3'};
   if (v3 && v3.vga) return {kind: 'vga', v3: true, name: 'VGA V3', short: 'VGA V3'};
-  const k = layoutInput(i).kind in IN_KINDS ? layoutInput(i).kind : 'scart';
+  const k = layoutInput(i).kind;
+  if (!(k in IN_KINDS)) return {kind: 'empty', v3: false, unset: true, name: 'Module not set', short: 'NOT SET'};
   return {kind: k, v3: false, name: IN_KINDS[k][0], short: IN_KINDS[k][1]};
 }
 
 function readSettings() { return cfg && cfg.snapshot ? cfg.snapshot.settings : null; }
+
+// The output side is a chain from the control module outwards: the outputs and
+// the transcoders, where they sit. A transcoder converts only the outputs past
+// it (further from the control module), so its place is part of the layout.
+const TX_KIND = {tx_rgb_to_ypbpr: 0, tx_ypbpr_to_rgb: 1};  // layout kind -> TX index
+const isTx = (o) => o.kind in TX_KIND;
+const txOf = (o) => TX[TX_KIND[o.kind]];
+
+// Shown unless the SVS says it is not fitted (before a read, as last placed)
+function chainVisible(o) {
+  const snap = cfg && cfg.snapshot;
+  return !isTx(o) || !snap || !!snap.transcoders[txOf(o).fit];
+}
+
+// A transcoder the SVS reports that has no place yet goes next to the control module
+function placeTranscoders() {
+  const snap = cfg && cfg.snapshot;
+  if (!snap) return;
+  for (const t of TX) {
+    const kind = 'tx_' + t.key;
+    if (snap.transcoders[t.fit] && !layout.outputs.some((o) => o.kind === kind)) {
+      layout.outputs.unshift({kind, name: ''});
+      if (sel.t === 'out' || sel.t === 'tx') sel.i++;
+    }
+  }
+}
+
+const outputCount = () => layout.outputs.filter((o) => !isTx(o)).length;
+// Output number of chain entry i (1 = next to the control module)
+const outNumber = (i) => layout.outputs.slice(0, i + 1).filter((o) => !isTx(o)).length;
+const txBefore = (i) => layout.outputs.slice(0, i).filter((o) => isTx(o) && chainVisible(o)).map(txOf);
+const outsAfter = (i) => layout.outputs.map((o, j) => j > i && !isTx(o) ? j : -1).filter((j) => j >= 0);
 
 function syncEdits() {
   const snap = cfg && cfg.snapshot;
@@ -957,28 +994,33 @@ function modTile(o) {
 
 function renderStack() {
   const n = inputCount(), snap = cfg && cfg.snapshot;
+  placeTranscoders();
   const outs = layout.outputs.map((o, i) => {
-    const k = OUT_KINDS[o.kind] || OUT_KINDS.component;
-    return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + (i + 1)}),
+    if (!chainVisible(o)) return '';
+    if (isTx(o)) {
+      const t = txOf(o);
+      return modTile({t: 'tx', i, group: 'out', sel: sel.t === 'tx' && sel.i === i, svg: face('transcoder', 'tx', {tag: 'TX', sub: t.sub}),
+                      kind: 'TX', color: 'var(--ok)', name: t.name, aria: `${t.name} transcoder, converts the outputs past it`});
+    }
+    const k = OUT_KINDS[o.kind] || OUT_KINDS.component, num = outNumber(i);
+    return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + num}),
                     kind: k[1], color: 'var(--blue)', name: o.name, empty: 'Not set',
-                    aria: `Output ${i + 1}, ${k[0]}${o.name ? ', to ' + o.name : ''}`});
+                    aria: `Output ${num}, ${k[0]}${o.name ? ', to ' + o.name : ''}`});
   }).reverse().join('');
-  const tx = snap ? TX.filter((t) => snap.transcoders[t.fit]).map((t) =>
-    modTile({t: 'tx', i: TX.indexOf(t), sel: sel.t === 'tx' && sel.i === TX.indexOf(t), svg: face('transcoder', 'tx', {tag: 'TX', sub: t.sub}),
-             kind: 'TX', color: 'var(--ok)', name: t.name, aria: t.name + ' transcoder'})).join('') : '';
-  const add = layout.outputs.length < MAX_OUTPUTS
-    ? `<button type="button" class="mod add" data-act="add-out"><svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add output<span class="small">${MAX_OUTPUTS - layout.outputs.length} left</span></button>` : '';
+  const nOut = outputCount();
+  const add = nOut < MAX_OUTPUTS
+    ? `<button type="button" class="mod add" data-act="add-out"><svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add output<span class="small">${MAX_OUTPUTS - nOut} left</span></button>` : '';
   const ins = Array.from({length: n}, (_, i) => {
     const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
     return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
                     svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
-                    kind: k.short, dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
+                    kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
   }).join('');
   const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
   $('stack').innerHTML =
-    `<div class="sgroup outs"><div class="shead"><span class="small">set by you · ${layout.outputs.length} of up to ${MAX_OUTPUTS}</span><h2 class="out">Outputs</h2></div>` +
-    `<div class="stiles" data-group="out">${add}${outs}${tx}</div></div><div class="ssep"></div>` +
+    `<div class="sgroup outs"><div class="shead"><span class="small">set by you · ${nOut} of up to ${MAX_OUTPUTS}</span><h2 class="out">Outputs</h2></div>` +
+    `<div class="stiles" data-group="out">${add}${outs}</div></div><div class="ssep"></div>` +
     `<div class="sgroup ctl"><h2 class="ctl">Control</h2><div class="stiles">` +
     modTile({t: 'ctl', i: 0, sel: sel.t === 'ctl', svg: face('control', 'ctl', {tag: 'CTRL'}), kind: 'CONTROL', color: 'var(--accent)', name: fw, aria: 'Control module'}) +
     `</div></div><div class="ssep"></div>` +
@@ -1006,20 +1048,22 @@ function irLabel(a, c) {
 function renderInspector() {
   const el = $('insp'), snap = cfg && cfg.snapshot, n = inputCount();
   if (sel.t === 'in' && sel.i >= n) sel = {t: 'ctl', i: 0};
-  if (sel.t === 'out' && sel.i >= layout.outputs.length) sel = {t: 'ctl', i: 0};
-  if (sel.t === 'tx' && !(snap && snap.transcoders[TX[sel.i].fit])) sel = {t: 'ctl', i: 0};
+  const entry = layout.outputs[sel.i];
+  if (sel.t === 'out' && !(entry && !isTx(entry))) sel = {t: 'ctl', i: 0};
+  if (sel.t === 'tx' && !(entry && isTx(entry) && chainVisible(entry))) sel = {t: 'ctl', i: 0};
 
   if (sel.t === 'in') {
     const i = sel.i, k = inputKind(i), li = layoutInput(i), lit = svs && svs.current_input === i + 1;
     const e = edits && edits[i], r = readSettings();
     const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
     const txFit = (t) => !!(snap && snap.transcoders[t]);
+    const needKind = 'Pick the module fitted here first';
     const module = k.v3
       ? `<div class="detected">${face(k.kind, 'in', {tag: 'V3'})}<div><b style="font-size:14px">${k.name} module</b>` +
         `<div class="small" style="color:#9FD8B4">Recognised by the SVS: V3 modules report themselves.</div></div></div>`
       : `<div class="pick" role="radiogroup" aria-label="Input module">` + Object.entries(IN_KINDS).map(([id, kk]) =>
           `<button type="button" role="radio" aria-checked="${id === k.kind}" data-kind="${id}">${face(id, 'in')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
-        `</div><span class="small">Only V3 modules report themselves; for the rest, pick what is fitted.</span>`;
+        `</div><span class="small${k.unset ? ' warn' : ''}">${k.unset ? 'Not set up yet: pick the module fitted in this slot.' : 'Only V3 modules report themselves; for the rest, pick what is fitted.'}</span>`;
     const codes = e ? e.ir : [];
     const irChanged = e && r && JSON.stringify(e.ir) !== JSON.stringify(r[i].ir);
     el.innerHTML = `<div class="insp-face">${face(k.kind, 'in', {lit, tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
@@ -1028,8 +1072,8 @@ function renderInspector() {
       `<span class="small">Shown in Home Assistant with the active input.</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
-      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : 'This module has no RGB to convert') +
-      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : 'This module has no YPbPr to convert') +
+      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : k.unset ? needKind : 'This module has no RGB to convert') +
+      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : k.unset ? needKind : 'This module has no YPbPr to convert') +
       optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', 'Only V3 SCART and V3 VGA modules') +
       optRow(i, 'sync_bypass', 'Sync bypass', k.v3 && k.kind === 'scart', 'Pass the console’s sync untouched', 'Only V3 SCART modules') +
       optRow(i, 'auto_profile', 'Auto profile', true, 'Send the scaler this input’s profile and IR codes when it comes on', '') +
@@ -1044,19 +1088,26 @@ function renderInspector() {
       `<div class="stack"><label class="lbl" for="ir-add">Add a button press</label><select id="ir-add"${e && codes.length < snap.ir_slots ? '' : ' disabled'}><option value="">Choose a button…</option>` +
       (REMOTES[remote] || []).map(([b, a, c], j) => `<option value="${j}">${esc(b)} · ${hex2(a)} ${hex2(c)}</option>`).join('') + `</select></div></div></div></div></div>`;
   } else if (sel.t === 'out') {
-    const i = sel.i, o = layout.outputs[i];
-    el.innerHTML = `<div class="insp-face">${face(o.kind, 'out', {tag: 'OUT ' + (i + 1)})}</div>` +
-      `<div class="insp-body"><div class="row"><h3 class="grow">Output ${i + 1}</h3><button type="button" class="danger" data-act="del-out">Remove output</button></div>` +
+    const i = sel.i, o = layout.outputs[i], num = outNumber(i), by = txBefore(i);
+    el.innerHTML = `<div class="insp-face">${face(o.kind, 'out', {tag: 'OUT ' + num})}</div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">Output ${num}</h3><button type="button" class="danger" data-act="del-out">Remove output</button></div>` +
       `<div class="stack"><label class="lbl" for="out-name">Connected to</label><input id="out-name" type="text" maxlength="32" placeholder="e.g. RetroTINK 4K" value="${esc(o.name)}"></div>` +
       `<div class="stack"><span class="lbl">Module</span><div class="pick out" role="radiogroup" aria-label="Output module">` +
       Object.entries(OUT_KINDS).map(([id, kk]) => `<button type="button" role="radio" aria-checked="${id === o.kind}" data-kind="${id}">${face(id, 'out')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
-      `</div></div><div class="note">The SVS cannot see its outputs, so these are labels for you. All outputs carry the same picture; a transcoder converts it on every output for the inputs where it is on.</div></div>`;
+      `</div></div><div class="stack"><span class="lbl">Transcoders</span><div class="small" style="font-size:14px;color:var(--soft)">` +
+      (by.length ? `Converted by the ${by.map((t) => t.name).join(' and the ')} transcoder${by.length > 1 ? 's' : ''}, for the inputs where ${by.length > 1 ? 'they are' : 'it is'} on.`
+        : 'No transcoder between it and the control module: it carries the picture as the console sends it.') +
+      `</div></div><div class="note">The SVS cannot see its outputs, so these are labels for you. A transcoder converts only the outputs past it, further from the control module: drag it to choose which.</div></div>`;
   } else if (sel.t === 'tx') {
-    const t = TX[sel.i];
+    const t = txOf(layout.outputs[sel.i]), after = outsAfter(sel.i);
     const uses = (edits || []).map((e, i) => e[t.key] ? i : -1).filter((i) => i >= 0);
     el.innerHTML = `<div class="insp-face">${face('transcoder', 'tx', {tag: 'TX', sub: t.sub})}</div>` +
       `<div class="insp-body"><div class="row"><h3 class="grow">${t.name} transcoder</h3><span class="chip" style="color:var(--ok);border-color:#2A5A3C">Recognised by the SVS</span></div>` +
-      `<div class="small" style="font-size:14px;color:var(--soft)">${t.desc}</div><div class="stack"><span class="lbl">Turned on for</span><div class="irs">` +
+      `<div class="small" style="font-size:14px;color:var(--soft)">${t.desc}</div>` +
+      `<div class="stack"><span class="lbl">Converts the outputs past it</span>` +
+      (after.length ? `<div class="irs">${after.map((j) => `<button type="button" data-goto-out="${j}">OUT ${outNumber(j)}${layout.outputs[j].name ? ' · ' + esc(layout.outputs[j].name) : ''}</button>`).join('')}</div>`
+        : '<div class="note warn">No output past it, so it converts nothing. Drag it closer to the control module, or outputs further out.</div>') +
+      `</div><div class="stack"><span class="lbl">Turned on for</span><div class="irs">` +
       (uses.length ? uses.map((i) => `<button type="button" data-goto="${i}">Input ${i + 1}${layoutInput(i).name ? ' · ' + esc(layoutInput(i).name) : ''}</button>`).join('')
         : '<span class="small">No input yet. Turn it on from an input’s settings.</span>') + `</div></div>` +
       `<div class="note">To save these, the bridge switches the SVS to each of those inputs in turn, then back to the one that was on screen.</div></div>`;
@@ -1145,16 +1196,16 @@ function saveLayout(now) {
   }, now ? 0 : 600);
 }
 
-// Moves a module within its own kind; an input takes its SVS settings along
-// (they become changes to save), since the SVS keeps them by position
+// Moves a module within its own side; an input takes its SVS settings along
+// (they become changes to save), since the SVS keeps them by position. On the
+// output side outputs and transcoders move among each other.
 function moveItem(group, from, to) {
   if (from === to) return;
   const list = group === 'in' ? layout.inputs : layout.outputs;
   if (group === 'in') layoutInput(Math.max(from, to));
   list.splice(to, 0, list.splice(from, 1)[0]);
   if (group === 'in' && edits) edits.splice(to, 0, edits.splice(from, 1)[0]);
-  const t = group === 'in' ? 'in' : 'out';
-  if (sel.t === t) {
+  if (group === 'in' ? sel.t === 'in' : sel.t === 'out' || sel.t === 'tx') {
     if (sel.i === from) sel.i = to;
     else if (from < sel.i && to >= sel.i) sel.i--;
     else if (from > sel.i && to <= sel.i) sel.i++;
@@ -1238,10 +1289,12 @@ $('stack').addEventListener('keydown', (e) => {
   const b = e.target.closest('.mod[data-group]');
   if (!b || !e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
   e.preventDefault();
-  const g = b.dataset.group, i = +b.dataset.i, len = g === 'in' ? inputCount() : layout.outputs.length;
-  const to = i + ((e.key === 'ArrowRight') === (g === 'in') ? 1 : -1);
-  if (to < 0 || to >= len) return;
-  sel = {t: g, i};
+  const g = b.dataset.group, i = +b.dataset.i;
+  const tiles = [...$('stack').querySelectorAll(`.mod[data-group="${g}"]`)];
+  const next = tiles[tiles.indexOf(b) + (e.key === 'ArrowRight' ? 1 : -1)];
+  if (!next) return;
+  const to = +next.dataset.i;
+  sel = {t: b.dataset.t, i};
   moveItem(g, i, to);
   const moved = $('stack').querySelector(`.mod[data-group="${g}"][data-i="${to}"]`);
   if (moved) moved.focus();
@@ -1296,7 +1349,7 @@ $('stack').addEventListener('pointerdown', (e) => {
     if (was) {
       dragJustEnded = true;
       setTimeout(() => { dragJustEnded = false; }, 0);
-      if (target) { sel = {t: group, i: from}; moveItem(group, from, +target.dataset.i); }
+      if (target) { sel = {t: tile.dataset.t, i: from}; moveItem(group, from, +target.dataset.i); }
     }
   }
   addEventListener('pointermove', move, {passive: false});
@@ -1313,12 +1366,14 @@ $('insp').addEventListener('click', (e) => {
     saveLayout(true);
   } else if (b.dataset.act === 'del-out') {
     layout.outputs.splice(sel.i, 1);
-    sel = layout.outputs.length ? {t: 'out', i: Math.max(0, sel.i - 1)} : {t: 'ctl', i: 0};
+    sel = {t: 'ctl', i: 0};
     saveLayout(true);
   } else if (b.dataset.irDel !== undefined) {
     edits[sel.i].ir.splice(+b.dataset.irDel, 1);
   } else if (b.dataset.goto !== undefined) {
     sel = {t: 'in', i: +b.dataset.goto};
+  } else if (b.dataset.gotoOut !== undefined) {
+    sel = {t: 'out', i: +b.dataset.gotoOut};
   } else {
     return;
   }
