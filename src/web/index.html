@@ -66,10 +66,6 @@ dialog#ask p{margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--soft);wh
 /* SVS tab */
 .svs-now{display:flex;flex-direction:column;align-items:center;padding:12px 0}
 .svs-now>span:first-child{font:700 72px/1 var(--head)}
-.svs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
-.svs-grid div{height:64px;border-radius:10px;background:var(--raised);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font:700 22px var(--head);color:var(--faint)}
-.svs-grid div small{font:500 11px var(--sans);letter-spacing:.04em}
-.svs-grid div.on{background:#3A1E2A;border-color:var(--accent);color:var(--text)}
 .log{height:260px}
 .log .t{color:var(--faint)}.log .tx{color:var(--accent)}.log .ev{color:var(--faint);font-style:italic}.log .empty{color:var(--faint)}
 .switch{display:flex;align-items:center;gap:12px;cursor:pointer;font-size:14px;font-weight:500}
@@ -114,8 +110,56 @@ body.auth header nav,body.auth header .chip{display:none}
 .wiz input{height:48px;font-size:16px;border-radius:10px}
 .wiz .pw button.eye{width:44px;height:44px}
 button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
+/* SVS tab: the switch, as a row of modules (outputs | control | inputs) */
+.cfgbar{flex-direction:row;align-items:center;gap:16px}
+.cfgbar>svg{flex:none;color:var(--muted)}
+.cfgbar.warn{background:#2A2416}.cfgbar.warn>svg{color:var(--warn)}
+.cfg-text{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cfg-text b{font-weight:600;font-size:14px}.cfg-text span{font-size:13px;color:var(--soft)}
+.stack-row{display:flex;align-items:stretch;gap:10px;overflow-x:auto;padding:2px 2px 6px}
+.sgroup{flex:1 0 auto;display:flex;flex-direction:column;gap:10px}
+.sgroup.outs{align-items:flex-end}.sgroup.ins{align-items:flex-start}.sgroup.ctl{flex:none;align-items:center}
+.sgroup h2.out{color:var(--blue)}.sgroup h2.ctl{color:var(--accent)}
+.ssep{width:1px;background:var(--line);flex:none}
+.shead{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.stiles{display:flex;gap:8px;align-items:stretch}
+button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;padding:8px 4px;border-radius:12px;background:var(--raised);white-space:normal;user-select:none;-webkit-user-select:none}
+.mod svg{width:64px;height:114px;display:block;pointer-events:none}
+.mod .mk{font:600 11px var(--mono);color:#C9CCD1;display:flex;align-items:center;gap:4px}
+.mod .mn{font-size:12px;color:var(--soft);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mod .mn.none{color:#6B6F76}
+.mod .pend{font-size:11px;color:var(--warn)}
+.mod.sel{background:#3A1E2A;border-color:var(--accent)}
+.mod.dragging{position:relative;z-index:5;box-shadow:0 12px 28px #000a;cursor:grabbing;transition:none}
+.mod.drop{outline:2px dashed var(--accent);outline-offset:2px}
+.mod.add{border-style:dashed;background:transparent;color:var(--blue);border-color:#2F5F72;justify-content:center;font-size:12px}
+.vdot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.insp{flex-direction:row;gap:22px}
+.insp-face{flex:none;width:150px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.insp-face svg{width:132px;height:236px}
+.insp-body{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:18px}
+.insp-body h3{margin:0;font:700 22px var(--head)}
+.pick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.pick button{height:auto;flex-direction:column;gap:6px;padding:10px 6px;border-radius:10px;background:var(--raised);white-space:normal;min-width:0}
+.pick button svg{width:48px;height:86px}
+.pick b{font-size:12px;text-align:center;line-height:1.25}.pick small{font-size:11px;color:var(--faint);text-align:center;font-weight:400;line-height:1.3}
+.pick button[aria-checked=true]{background:#3A1E2A;border-color:var(--accent)}
+.pick.out button[aria-checked=true]{background:#16303A;border-color:var(--blue)}
+.detected{display:flex;align-items:center;gap:14px;padding:12px 14px;background:#16301F;border:1px solid #2A5A3C;border-radius:10px}
+.detected svg{width:40px;height:72px;flex:none}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;padding:14px 16px;background:var(--raised);border-radius:10px}
+.opts .switch{align-items:flex-start}.opts .switch input{margin-top:1px}
+.opts .switch.off{opacity:.6}
+.hint{display:block;font-size:12px;font-weight:400;color:var(--faint)}
+.chg{font-size:11px;font-weight:600;color:var(--warn);margin-left:6px}
+.irs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-height:34px}
+.ir{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 4px 0 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:13px;font-weight:500}
+.ir .mono{font-size:12px;color:var(--faint)}
+.ir button{width:26px;height:26px;padding:0;border:0;border-radius:50%;color:var(--faint)}
+.irbox{display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:var(--raised);border-radius:10px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 @media (max-width:1000px){.grid3{grid-template-columns:minmax(0,1fr)}.span2,.span3{grid-column:auto}.upd{grid-template-columns:minmax(0,1fr)}}
-@media (max-width:640px){header{padding:0 12px;gap:8px}body:not(.auth) .logo span{display:none}nav.tabs{margin-left:0}nav.tabs a{padding:0 8px}.hide-sm{display:none}main{padding:16px}}
+@media (max-width:640px){.insp{flex-direction:column}.insp-face{width:auto}.pick{grid-template-columns:repeat(3,minmax(0,1fr))}.opts,.two{grid-template-columns:minmax(0,1fr)}.cfgbar{flex-wrap:wrap}header{padding:0 12px;gap:8px}body:not(.auth) .logo span{display:none}nav.tabs{margin-left:0}nav.tabs a{padding:0 8px}.hide-sm{display:none}main{padding:16px}}
 </style>
 </head>
 <body class="auth">
@@ -157,16 +201,26 @@ button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
 
 <!-- SVS -->
 <section data-view="svs" class="grid3" hidden>
+<div class="panel span3 cfgbar" id="cfg-bar">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3"/><path d="M15 7h3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-3"/><path d="M8 12h8"/></svg>
+<div class="cfg-text"><b id="cfg-title">Settings stored in the SVS</b><span id="cfg-sub"></span><progress id="cfg-prog" max="100" hidden></progress><div class="msg" id="cfg-msg"></div></div>
+<button type="button" id="cfg-read" hidden>Read from the SVS</button>
+<button type="button" class="primary" id="cfg-write" hidden>Save to the SVS</button>
+</div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Your switch</h2><span class="small hide-sm" id="stack-hint">Drag a module to move it: inputs among inputs, outputs among outputs</span></div>
+<div class="note warn" id="stack-warn" hidden></div>
+<div class="stack-row" id="stack"></div>
+<div class="msg" id="layout-msg"></div>
+</div>
+
+<div class="panel span2 insp" id="insp" aria-live="polite"></div>
+
 <div class="panel">
 <div class="row"><h2 class="grow">Active input</h2><span class="dot" id="v-dot"></span><span class="small" id="v-state">–</span></div>
 <div class="svs-now"><span id="v-input">–</span><span id="v-sub" class="small"></span></div>
 <div class="kv"><span>Firmware</span><span id="svs-fw">–</span><span>Inputs</span><span id="svs-inputs">–</span></div>
-</div>
-
-<div class="panel span2">
-<div class="row"><h2 class="grow">Inputs</h2><span class="small" id="v-total"></span></div>
-<div class="svs-grid" id="v-grid" hidden></div>
-<div class="small" id="v-nogrid">The inputs show up once the SVS says how many it has (it prints them when it starts).</div>
 <div class="small">The bridge reports the active input to Home Assistant, and to a Cruller on the same network.</div>
 </div>
 
@@ -497,7 +551,7 @@ function showAuth(view) {
   $('login').hidden = view !== 'login';
   if (view === 'login' && wasIn) $('login-pw').focus();
   route();
-  if (signedIn) { refresh(); refreshSvs(); startLog(); loadApiToken(); }
+  if (signedIn) { refresh(); loadLayout(); refreshSvs(); startLog(); loadApiToken(); }
 }
 
 let tab = 'svs';
@@ -634,15 +688,9 @@ function renderSvs(s) {
   text('svs-fw', !s.connected ? '–' : s.firmware ? s.firmware.replace(/^SVS_FW_/, '') : unknown);
   text('svs-inputs', !s.connected ? '–' : s.total_inputs != null ? s.total_inputs : unknown);
 
-  // One tile per input, the active one lit: only once the SVS has said how many it has
-  const total = s.connected && s.total_inputs ? s.total_inputs : 0;
-  text('v-total', total ? total + ' inputs' : '');
-  $('v-grid').hidden = !total;
-  $('v-nogrid').hidden = !!total;
-  $('v-grid').innerHTML = Array.from({length: total}, (_, i) => {
-    const on = s.current_input === i + 1;
-    return '<div class="' + (on ? 'on' : '') + '">' + (i + 1) + '<small>' + (on ? 'ACTIVE' : 'INPUT ' + (i + 1)) + '</small></div>';
-  }).join('');
+  const name = s.current_input > 0 && s.current_input_name;
+  if (known && name) text('v-sub', name);
+  renderSwitch();
 
   // Send vs. listen-only mode. The whole mode UI only makes sense with an SVS
   // attached, so it is hidden until one is connected.
@@ -747,9 +795,566 @@ async function refreshSvs() {
   clearTimeout(svsTimer);
   if (!signedIn) return;
   try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
+  if (!cfgTimer) refreshCfg();
   // Poll faster while checking or flashing
   svsTimer = setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
 }
+
+// --- SVS: the switch --------------------------------------------------------------
+//
+// The row of modules as they sit: outputs, the control module, inputs. What
+// each module is and its name is the layout, kept on the bridge (the SVS only
+// counts its inputs and recognises V3 modules); per-input settings and IR
+// codes live in the SVS and are read and saved on request.
+
+const IN_KINDS = {
+  scart: ['SCART', 'SCART', 'RGBS, RGsB, YPbPr'],
+  component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
+  vga: ['VGA', 'VGA', 'HD-15, audio jack'],
+  svideo: ['S-Video', 'S-VIDEO', 'Composite, stereo audio'],
+  dterm: ['D-Terminal', 'D-TERM', 'Japanese YPbPr, stereo'],
+};
+const OUT_KINDS = {
+  scart: ['SCART', 'SCART', 'RGB or YPbPr'],
+  component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
+  vga: ['VGA', 'VGA', 'HD-15, audio jack'],
+  svideo: ['S-Video', 'S-VIDEO', 'Composite, stereo audio'],
+  bnc: ['BNC', 'BNC', 'R, G, B, H/CS, V'],
+};
+const MAX_OUTPUTS = 6;
+const TX = [
+  {key: 'rgb_to_ypbpr', fit: 'rgb_to_ypbpr', name: 'RGB → YPbPr', sub: 'RGB TO YPBPR',
+   desc: 'Turns an RGB source into component video on the way out, so an RGB console can feed a component-only display. You choose the inputs it acts on.'},
+  {key: 'ypbpr_to_rgb', fit: 'ypbpr_to_rgb', name: 'YPbPr → RGB', sub: 'YPBPR TO RGB',
+   desc: 'Turns a component source into RGB on the way out, so a component console can feed an RGB monitor. You choose the inputs it acts on.'},
+];
+// The official utility's IR presets ([button, address, command]); RetroTINK 4K
+// Profile 4 corrected to 0x0A (the utility sends INPUT's 0x11)
+const REMOTES = {"RetroTINK 4K Pro":[["Power",73,26],["INPUT",73,17],["OUT",73,32],["SCL",73,33],["SFX",73,34],["ADC",73,35],["PROF",73,36],["Profile 1",73,11],["Profile 2",73,7],["Profile 3",73,3],["Profile 4",73,10],["Profile 5",73,6],["Profile 6",73,2],["Profile 7",73,9],["Profile 8",73,5],["Profile 9",73,1],["Profile 10",73,37],["Profile 11",73,38],["Profile 12",73,39],["MENU",73,92],["BACK",73,66],["Up",73,24],["Left",73,87],["Enter",73,83],["Right",73,79],["Down",73,16],["DIAG",73,40],["STAT",73,41],["AUTO-GAIN",73,43],["AUTO-PHASE",73,45],["PLAY/PAUSE",73,86],["SAFE",73,46],["SYNC-GEN",73,44],["SYNC-BUF",73,47],["4K",73,48],["1080p",73,49],["1440p",73,50],["480p",73,51],["RES1",73,52],["RES2",73,53],["RES3",73,54],["RES4",73,55],["AUX1",73,56],["AUX2",73,57],["AUX3",73,58],["AUX4",73,59],["AUX5",73,60],["AUX6",73,61],["AUX7",73,62],["AUX8",73,63]],"RetroTINK 4K CE":[["Power",73,26],["INPUT",73,17],["OUT",73,32],["SCALER",73,33],["SFX",73,34],["ADC",73,35],["PROF",73,36],["Profile 1",73,11],["Profile 2",73,7],["Profile 3",73,3],["Profile 4",73,10],["Profile 5",73,6],["Profile 6",73,2],["Profile 7",73,9],["Profile 8",73,5],["Profile 9",73,1],["Profile 10",73,37],["Profile 11",73,38],["Profile 12",73,39],["MENU",73,92],["BACK",73,66],["Up",73,24],["Left",73,87],["Enter",73,83],["Right",73,79],["Down",73,16],["DIAG",73,40],["STAT",73,41],["AUTO-GAIN",73,43],["AUTO-PHASE",73,45],["AUD",73,97],["SAFE",73,46],["SYNC-GEN",73,44],["SYNC-BUF",73,47],["4K",73,48],["1080p",73,49],["1440p",73,50],["480p",73,51],["RES1",73,52],["RES2",73,53],["COL",73,96],["AUX1",73,56],["AUX2",73,57],["AUX3",73,58],["AUX4",73,59],["AUX5",73,60],["AUX6",73,61],["AUX7",73,62],["AUX8",73,63]],"RetroTINK 5X Pro":[["Power",179,220],["RGB",179,176],["YPbPr",179,177],["Y/C",179,178],["CV",179,179],["SVC",179,180],["YSD",179,181],["Profile 1",179,146],["Profile 2",179,147],["Profile 3",179,204],["Profile 4",179,142],["Profile 5",179,143],["Profile 6",179,200],["Profile 7",179,138],["Profile 8",179,139],["Profile 9",179,196],["Profile 10",179,135],["LOAD",179,182],["SAVE",179,183],["MENU",179,226],["BACK",179,197],["Up",179,202],["Left",179,153],["ENTER",179,206],["Right",179,193],["Down",179,210],["ABOUT",179,184],["STAT",179,185],["PHASE +",179,186],["PHASE -",179,189],["PROC",179,187],["SAFE",179,190],["SYNC-LOCK",179,188],["SYNC-BUF",179,191],["1080pO",179,208],["1080pF",179,209],["1080pU",179,211],["720p",179,212],["1440p2",179,213],["1440p1",179,214],["240p",179,215],["480i",179,216],["INPUT",179,217],["OUT",179,218],["SCL",179,219],["INTP",179,230],["SAMP",179,221],["SDP",179,222],["ADC",179,223],["HDMI",179,224],["AUX1",179,225],["AUX2",179,229],["AUX3",179,227],["AUX4",179,228]],"OSSC":[["1",62,41],["2",62,169],["3",62,105],["4",62,233],["5",62,25],["6",62,153],["7",62,89],["8",62,217],["9",62,57],["0",62,201],["10+",62,185],["TOGGLE/RETURN",62,121],["PIC/CANCEL",62,141],["MENU",62,77],["EXIT",62,237],["INFO",62,101],["CLOCK, EJECT",62,209],["REWIND",62,97],["FORWARD",62,225],["L/R",62,226],["PAUSE, ZOOM",62,193],["CHAPTER-",62,157],["CHAPTER+",62,93],["STOP",62,161],["PLAY",62,65],["LEFT",62,173],["RIGHT",62,109],["UP",62,45],["DOWN",62,205],["OK",62,29],["POWER",62,1],["VOL-",28,240],["VOL+",28,112],["MUTE",28,24],["CH+",28,80],["CH-",28,208],["TV/AV",28,200],["PNS",28,72],["TONE-",94,216],["TONE+",94,88]],"OSSC Pro":[["Power",10,232],["TONE-",10,24],["TONE+",10,152],["TV/AV",10,122],["MUTE",10,208],["PNS",10,80],["CH+",10,72],["CH-",10,168],["MENU",10,202],["L/R",10,197],["PIC/CANCEL",10,38],["EXIT",10,38],["LEFT",10,206],["RIGHT",10,78],["UP",10,14],["DOWN",10,142],["OK",10,204],["INFO",10,8],["PAUSE",10,50],["PLAY",10,162],["STOP",10,98],["EJECT",10,226],["1",10,176],["2",10,112],["3",10,240],["4",10,56],["5",10,184],["6",10,120],["7",10,248],["8",10,32],["9",10,187],["0",10,48],["10+",10,136],["TOGGLE/RETURN",10,204]]};
+
+// Module fronts, drawn from photos of the real modules: connectors in one column
+// (audio first), the module's name printed along its side
+function face(kind, role, o) {
+  o = o || {};
+  const rca = (y, c) => `<rect x="70" y="${y + 2}" width="5" height="10" rx="1" fill="#9A9EA5"/>` +
+    `<circle cx="62" cy="${y}" r="11" fill="${c}"/><circle cx="62" cy="${y}" r="7.3" fill="#C9CCD1"/><circle cx="62" cy="${y}" r="3.1" fill="#0B0C0E"/>`;
+  const lab = (y, t) => `<text x="44" y="${y + 2.5}" font-size="7" fill="#7A7E85" text-anchor="end">${t}</text>`;
+  const W = '#E6E6E2', R = '#C9423A';
+  const col = (list) => list.map(([y, c, t]) => rca(y, c) + lab(y, t)).join('');
+  let body = '';
+  if (kind === 'scart') {
+    let pins = '';
+    for (let y = 46; y <= 136; y += 9) pins += `<rect x="51" y="${y}" width="5" height="3"/>`;
+    for (let y = 50.5; y <= 132; y += 9) pins += `<rect x="65" y="${y}" width="5" height="3"/>`;
+    body = '<circle cx="62" cy="22" r="3" fill="#8A8E95"/><path d="M44 34H80V140L72 152H44Z" fill="#0B0C0E" stroke="#6B7078" stroke-width="2" stroke-linejoin="round"/>' +
+      `<path d="M49 40H75V137L69 146H49Z" fill="#17191C"/><g fill="#B8A06A">${pins}</g><circle cx="62" cy="166" r="3" fill="#8A8E95"/>`;
+  } else if (kind === 'component') {
+    body = col([[36, R, 'R'], [64, W, 'L'], [92, R, 'Pr'], [120, '#3A78C9', 'Pb'], [148, '#3FA35B', 'Y']]);
+  } else if (kind === 'svideo') {
+    body = col([[36, R, 'R'], [64, W, 'L'], [94, '#D9B23A', 'CV']]) +
+      '<circle cx="62" cy="136" r="13" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="2.4"/><rect x="59" y="124" width="6" height="5" fill="#A7ABB1"/>' +
+      '<g fill="#C9A55A"><circle cx="57" cy="133" r="1.6"/><circle cx="67" cy="133" r="1.6"/><circle cx="55" cy="141" r="1.6"/><circle cx="69" cy="141" r="1.6"/></g>' + lab(136, 'S');
+  } else if (kind === 'vga') {
+    let pins = '';
+    for (const [x, y0] of [[57, 120], [62, 123], [67, 120]]) for (let y = y0; y < y0 + 35; y += 7) pins += `<circle cx="${x}" cy="${y}" r="1.7"/>`;
+    body = '<circle cx="62" cy="32" r="7" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="1.8"/><circle cx="62" cy="32" r="2.8" fill="#2E3238"/>' + lab(32, '3.5') +
+      col([[58, R, 'R'], [84, W, 'L']]) +
+      '<circle cx="62" cy="107" r="5" fill="#A7ABB1"/><circle cx="62" cy="167" r="5" fill="#A7ABB1"/>' +
+      '<path d="M46 113L78 119V155L46 161Z" fill="#A7ABB1"/><path d="M50 118L74 123V151L50 156Z" fill="#2F6FC0"/>' +
+      `<g fill="#1A2C45">${pins}</g>` + lab(137, 'HD-15');
+  } else if (kind === 'dterm') {
+    let pins = '';
+    for (const x of [59, 63]) for (let y = 103; y < 140; y += 5) pins += `<rect x="${x}" y="${y}" width="2" height="2"/>`;
+    body = col([[40, R, 'R'], [68, W, 'L']]) +
+      '<path d="M53 94H71V144L67 150H57L53 144Z" fill="#D8CFB8" stroke="#A89E86" stroke-linejoin="round"/>' +
+      `<rect x="58" y="100" width="8" height="42" rx="1" fill="#2A2620"/><g fill="#C9A55A">${pins}</g>` + lab(122, 'D');
+  } else if (kind === 'bnc') {
+    body = [[36, 'V'], [64, 'H/CS'], [92, 'B'], [120, 'G'], [148, 'R']].map(([y, t]) =>
+      `<rect x="49" y="${y - 2}" width="4" height="4" fill="#8A8E95"/><rect x="71" y="${y - 2}" width="4" height="4" fill="#8A8E95"/>` +
+      `<circle cx="62" cy="${y}" r="10" fill="#B8BCC2" stroke="#7A7E85"/><circle cx="62" cy="${y}" r="6" fill="#1A1C20"/><circle cx="62" cy="${y}" r="1.6" fill="#C9A55A"/>` + lab(y, t)).join('');
+  } else if (kind === 'control') {
+    body = '<rect x="101" y="82" width="7" height="36" rx="1.5" fill="#0B0C0E" stroke="#3A3D42" stroke-width="1.2"/>';
+  } else if (kind === 'transcoder') {
+    body = `<text x="62" y="100" transform="rotate(-90 62 100)" font-size="8" font-weight="500" letter-spacing="1.2" fill="#8A8E95" text-anchor="middle" dominant-baseline="middle">${o.sub} TRANSCODER</text>`;
+  }
+  const names = {scart: 'SCART', component: 'COMPONENT', vga: 'VGA', svideo: 'COMPOSITE', dterm: 'D-TERMINAL', bnc: 'BNC'};
+  const printed = names[kind] ? names[kind] + (role === 'out' ? ' OUTPUT' : ' INPUT') : '';
+  const strip = {in: '#5A5F68', out: '#4FB3D9', ctl: '#E8618C', tx: '#4CC38A'}[role];
+  return `<svg viewBox="0 0 112 200" aria-hidden="true" font-family="IBM Plex Mono,monospace">` +
+    `<rect x="1" y="1" width="110" height="198" rx="5" fill="#161719" stroke="${o.lit ? '#E8618C' : '#2E3033'}" stroke-width="${o.lit ? 3 : 1.5}"/>` +
+    `<rect x="96" y="12" width="6" height="3" rx="1" fill="${strip}"/>` +
+    (printed ? `<text x="14" y="100" transform="rotate(-90 14 100)" font-size="7.5" font-weight="500" letter-spacing="1.2" fill="#6F737A" text-anchor="middle" dominant-baseline="middle">${printed}</text>` : '') +
+    body + (o.tag ? `<text x="62" y="190" font-size="9" font-weight="500" fill="#8A8E95" text-anchor="middle">${o.tag}</text>` : '') + '</svg>';
+}
+
+let layout = {inputs: [], outputs: []};
+let cfg = null;            // GET /device/svs/config
+let edits = null;          // the settings as changed on this page (null until read)
+let editsSeq = -1;         // the read they started from
+let sel = {t: 'ctl', i: 0};
+let remote = 'RetroTINK 4K Pro';
+let listenAfter = false;   // back to listen-only once a read or save ends
+let cfgOp = false;         // a read or save started from this page is running
+
+const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
+
+function inputCount() {
+  if (svs && svs.connected && svs.total_inputs > 0) return Math.min(svs.total_inputs, 32);
+  return layout.inputs.length;
+}
+
+function layoutInput(i) {
+  while (layout.inputs.length <= i) layout.inputs.push({kind: 'scart', name: ''});
+  return layout.inputs[i];
+}
+
+// What sits at input i: a V3 module the SVS recognised, or what was picked
+function inputKind(i) {
+  const v3 = cfg && cfg.snapshot && cfg.snapshot.v3[i];
+  if (v3 && v3.scart) return {kind: 'scart', v3: true, name: 'SCART V3', short: 'SCART V3'};
+  if (v3 && v3.vga) return {kind: 'vga', v3: true, name: 'VGA V3', short: 'VGA V3'};
+  const k = layoutInput(i).kind in IN_KINDS ? layoutInput(i).kind : 'scart';
+  return {kind: k, v3: false, name: IN_KINDS[k][0], short: IN_KINDS[k][1]};
+}
+
+function readSettings() { return cfg && cfg.snapshot ? cfg.snapshot.settings : null; }
+
+function syncEdits() {
+  const snap = cfg && cfg.snapshot;
+  if (!snap) { edits = null; editsSeq = -1; return; }
+  if (snap.seq !== editsSeq) {
+    edits = JSON.parse(JSON.stringify(snap.settings));
+    editsSeq = snap.seq;
+  }
+}
+
+const OPT_KEYS = ['auto_profile', 'rgsb', 'sync_bypass', 'rgb_to_ypbpr', 'ypbpr_to_rgb'];
+function changes(i) {
+  const r = readSettings();
+  if (!edits || !r || !r[i]) return 0;
+  const a = edits[i], b = r[i];
+  return OPT_KEYS.filter((k) => a[k] !== b[k]).length + (JSON.stringify(a.ir) !== JSON.stringify(b.ir) ? 1 : 0);
+}
+function pendingTotal() {
+  let n = 0;
+  if (edits) for (let i = 0; i < edits.length; i++) n += changes(i);
+  return n;
+}
+function txChanges() {
+  const r = readSettings();
+  return !!edits && edits.some((e, i) => e.rgb_to_ypbpr !== r[i].rgb_to_ypbpr || e.ypbpr_to_rgb !== r[i].ypbpr_to_rgb);
+}
+
+// --- Rendering
+
+function modTile(o) {
+  return `<button type="button" class="mod${o.sel ? ' sel' : ''}" data-t="${o.t}" data-i="${o.i}"` +
+    (o.group ? ` data-group="${o.group}"` : '') + ` aria-label="${esc(o.aria)}"${o.sel ? ' aria-pressed="true"' : ''}>` +
+    o.svg + `<span class="mk" style="color:${o.color || ''}">${esc(o.kind)}${o.dot ? '<span class="vdot" title="Recognised by the SVS"></span>' : ''}</span>` +
+    `<span class="mn${o.name ? '' : ' none'}">${esc(o.name || o.empty || '')}</span>` +
+    (o.pending ? '<span class="pend">not on SVS</span>' : '') + '</button>';
+}
+
+function renderStack() {
+  const n = inputCount(), snap = cfg && cfg.snapshot;
+  const outs = layout.outputs.map((o, i) => {
+    const k = OUT_KINDS[o.kind] || OUT_KINDS.component;
+    return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + (i + 1)}),
+                    kind: k[1], color: 'var(--blue)', name: o.name, empty: 'Not set',
+                    aria: `Output ${i + 1}, ${k[0]}${o.name ? ', to ' + o.name : ''}`});
+  }).reverse().join('');
+  const tx = snap ? TX.filter((t) => snap.transcoders[t.fit]).map((t) =>
+    modTile({t: 'tx', i: TX.indexOf(t), sel: sel.t === 'tx' && sel.i === TX.indexOf(t), svg: face('transcoder', 'tx', {tag: 'TX', sub: t.sub}),
+             kind: 'TX', color: 'var(--ok)', name: t.name, aria: t.name + ' transcoder'})).join('') : '';
+  const add = layout.outputs.length < MAX_OUTPUTS
+    ? `<button type="button" class="mod add" data-act="add-out"><svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add output<span class="small">${MAX_OUTPUTS - layout.outputs.length} left</span></button>` : '';
+  const ins = Array.from({length: n}, (_, i) => {
+    const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
+    return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
+                    svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
+                    kind: k.short, dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
+                    aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
+  }).join('');
+  const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
+  $('stack').innerHTML =
+    `<div class="sgroup outs"><div class="shead"><span class="small">set by you · ${layout.outputs.length} of up to ${MAX_OUTPUTS}</span><h2 class="out">Outputs</h2></div>` +
+    `<div class="stiles" data-group="out">${add}${outs}${tx}</div></div><div class="ssep"></div>` +
+    `<div class="sgroup ctl"><h2 class="ctl">Control</h2><div class="stiles">` +
+    modTile({t: 'ctl', i: 0, sel: sel.t === 'ctl', svg: face('control', 'ctl', {tag: 'CTRL'}), kind: 'CONTROL', color: 'var(--accent)', name: fw, aria: 'Control module'}) +
+    `</div></div><div class="ssep"></div>` +
+    `<div class="sgroup ins"><div class="shead"><h2>Inputs</h2><span class="small">${n ? (svs && svs.total_inputs > 0 ? 'the SVS reports ' + n : n + ' last known') : 'the SVS has not said how many yet'}</span></div>` +
+    `<div class="stiles" data-group="in">${ins}</div></div>`;
+}
+
+function optRow(i, key, label, ok, hint, why) {
+  const r = readSettings(), e = edits && edits[i];
+  const can = ok && !!e;
+  const checked = e ? e[key] : false;
+  const changed = e && r && e[key] !== r[i][key];
+  return `<label class="switch${can ? '' : ' off'}"><input type="checkbox" data-opt="${key}"${checked ? ' checked' : ''}${can ? '' : ' disabled'}>` +
+    `<span>${label}${changed ? '<span class="chg">changed</span>' : ''}<span class="hint">${esc(!e ? 'Read the settings from the SVS first' : ok ? hint : why)}</span></span></label>`;
+}
+
+function irLabel(a, c) {
+  for (const list of [REMOTES[remote] || [], ...Object.values(REMOTES)]) {
+    const b = list.find((x) => x[1] === a && x[2] === c);
+    if (b) return b[0];
+  }
+  return 'Code';
+}
+
+function renderInspector() {
+  const el = $('insp'), snap = cfg && cfg.snapshot, n = inputCount();
+  if (sel.t === 'in' && sel.i >= n) sel = {t: 'ctl', i: 0};
+  if (sel.t === 'out' && sel.i >= layout.outputs.length) sel = {t: 'ctl', i: 0};
+  if (sel.t === 'tx' && !(snap && snap.transcoders[TX[sel.i].fit])) sel = {t: 'ctl', i: 0};
+
+  if (sel.t === 'in') {
+    const i = sel.i, k = inputKind(i), li = layoutInput(i), lit = svs && svs.current_input === i + 1;
+    const e = edits && edits[i], r = readSettings();
+    const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
+    const txFit = (t) => !!(snap && snap.transcoders[t]);
+    const module = k.v3
+      ? `<div class="detected">${face(k.kind, 'in', {tag: 'V3'})}<div><b style="font-size:14px">${k.name} module</b>` +
+        `<div class="small" style="color:#9FD8B4">Recognised by the SVS: V3 modules report themselves.</div></div></div>`
+      : `<div class="pick" role="radiogroup" aria-label="Input module">` + Object.entries(IN_KINDS).map(([id, kk]) =>
+          `<button type="button" role="radio" aria-checked="${id === k.kind}" data-kind="${id}">${face(id, 'in')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
+        `</div><span class="small">Only V3 modules report themselves; for the rest, pick what is fitted.</span>`;
+    const codes = e ? e.ir : [];
+    const irChanged = e && r && JSON.stringify(e.ir) !== JSON.stringify(r[i].ir);
+    el.innerHTML = `<div class="insp-face">${face(k.kind, 'in', {lit, tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">Input ${i + 1}</h3>${lit ? '<span class="chip" style="border-color:var(--accent);color:#F28BAA"><span class="dot" style="background:var(--accent)"></span>On screen now</span>' : ''}</div>` +
+      `<div class="stack"><label class="lbl" for="in-name">What is plugged in</label><input id="in-name" type="text" maxlength="32" placeholder="e.g. Super Nintendo" value="${esc(li.name)}">` +
+      `<span class="small">Shown in Home Assistant with the active input.</span></div>` +
+      `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
+      `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
+      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : 'This module has no RGB to convert') +
+      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : 'This module has no YPbPr to convert') +
+      optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', 'Only V3 SCART and V3 VGA modules') +
+      optRow(i, 'sync_bypass', 'Sync bypass', k.v3 && k.kind === 'scart', 'Pass the console’s sync untouched', 'Only V3 SCART modules') +
+      optRow(i, 'auto_profile', 'Auto profile', true, 'Send the scaler this input’s profile and IR codes when it comes on', '') +
+      `</div></div>` +
+      `<div class="stack" style="gap:10px"><span class="lbl">IR codes <span class="small">· sent to the scaler when input ${i + 1} comes on${snap ? ' · ' + codes.length + ' of ' + snap.ir_slots : ''}</span>${irChanged ? '<span class="chg">changed</span>' : ''}</span>` +
+      `<div class="irbox"><div class="irs">` + (e ? (codes.length ? codes.map(([a, c], j) =>
+        `<span class="ir"><span class="mono">${j + 1}</span>${esc(irLabel(a, c))}<span class="mono">${hex2(a)} ${hex2(c)}</span>` +
+        `<button type="button" data-ir-del="${j}" aria-label="Remove ${esc(irLabel(a, c))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></span>`).join('')
+        : '<span class="small">No codes: nothing is sent to the scaler for this input.</span>') : '<span class="small">Read the settings from the SVS first.</span>') +
+      `</div><div class="two"><div class="stack"><label class="lbl" for="ir-remote">Remote</label><select id="ir-remote">` +
+      Object.keys(REMOTES).map((r_) => `<option${r_ === remote ? ' selected' : ''}>${esc(r_)}</option>`).join('') + `</select></div>` +
+      `<div class="stack"><label class="lbl" for="ir-add">Add a button press</label><select id="ir-add"${e && codes.length < snap.ir_slots ? '' : ' disabled'}><option value="">Choose a button…</option>` +
+      (REMOTES[remote] || []).map(([b, a, c], j) => `<option value="${j}">${esc(b)} · ${hex2(a)} ${hex2(c)}</option>`).join('') + `</select></div></div></div></div></div>`;
+  } else if (sel.t === 'out') {
+    const i = sel.i, o = layout.outputs[i];
+    el.innerHTML = `<div class="insp-face">${face(o.kind, 'out', {tag: 'OUT ' + (i + 1)})}</div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">Output ${i + 1}</h3><button type="button" class="danger" data-act="del-out">Remove output</button></div>` +
+      `<div class="stack"><label class="lbl" for="out-name">Connected to</label><input id="out-name" type="text" maxlength="32" placeholder="e.g. RetroTINK 4K" value="${esc(o.name)}"></div>` +
+      `<div class="stack"><span class="lbl">Module</span><div class="pick out" role="radiogroup" aria-label="Output module">` +
+      Object.entries(OUT_KINDS).map(([id, kk]) => `<button type="button" role="radio" aria-checked="${id === o.kind}" data-kind="${id}">${face(id, 'out')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
+      `</div></div><div class="note">The SVS cannot see its outputs, so these are labels for you. All outputs carry the same picture; a transcoder converts it on every output for the inputs where it is on.</div></div>`;
+  } else if (sel.t === 'tx') {
+    const t = TX[sel.i];
+    const uses = (edits || []).map((e, i) => e[t.key] ? i : -1).filter((i) => i >= 0);
+    el.innerHTML = `<div class="insp-face">${face('transcoder', 'tx', {tag: 'TX', sub: t.sub})}</div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">${t.name} transcoder</h3><span class="chip" style="color:var(--ok);border-color:#2A5A3C">Recognised by the SVS</span></div>` +
+      `<div class="small" style="font-size:14px;color:var(--soft)">${t.desc}</div><div class="stack"><span class="lbl">Turned on for</span><div class="irs">` +
+      (uses.length ? uses.map((i) => `<button type="button" data-goto="${i}">Input ${i + 1}${layoutInput(i).name ? ' · ' + esc(layoutInput(i).name) : ''}</button>`).join('')
+        : '<span class="small">No input yet. Turn it on from an input’s settings.</span>') + `</div></div>` +
+      `<div class="note">To save these, the bridge switches the SVS to each of those inputs in turn, then back to the one that was on screen.</div></div>`;
+  } else {
+    const v3 = snap ? snap.v3.map((v, i) => v.scart ? (i + 1) + ' SCART' : v.vga ? (i + 1) + ' VGA' : null).filter(Boolean).join(', ') || 'none' : '–';
+    const txs = snap ? TX.filter((t) => snap.transcoders[t.fit]).map((t) => t.name).join(', ') || 'none' : '–';
+    el.innerHTML = `<div class="insp-face">${face('control', 'ctl', {tag: 'CTRL'})}<span class="small">The microSD slot is on the edge by the pins.</span></div>` +
+      `<div class="insp-body"><h3>Control module</h3><div class="kv" style="max-width:460px">` +
+      `<span>Firmware</span><span>${esc(svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, '') : '–')}</span>` +
+      `<span>Input modules</span><span>${svs && svs.total_inputs != null ? svs.total_inputs : '–'}</span>` +
+      `<span>V3 modules</span><span>${esc(v3)}</span><span>Transcoders</span><span>${esc(txs)}</span></div>` +
+      `<div class="note">The control module counts the input modules when it starts, and recognises V3 modules and transcoders (read with the settings). ` +
+      `Reading and saving settings needs its firmware 1.20 or newer. The other modules and the outputs are yours to describe.</div></div>`;
+  }
+}
+
+function renderCfgBar() {
+  const c = cfg, connected = svs && svs.connected, idle = !c || c.task === 'idle';
+  let title = 'Settings stored in the SVS', sub = '', read = false, write = false, readLabel = 'Read from the SVS';
+  const bar = $('cfg-bar');
+  if (!connected) {
+    sub = 'Plug the SVS into the bridge to read or change its settings.';
+  } else if (!idle) {
+    title = c.task === 'reading' ? 'Reading the SVS’s settings' : 'Saving to the SVS';
+    sub = c.phase + '…';
+  } else if (!c || !c.snapshot) {
+    sub = c && c.blocker ? c.blocker : 'Sync, transcoders, auto profile and IR codes live in the SVS. Read them to see and change them here.';
+    read = !(c && c.blocker);
+  } else {
+    const n = pendingTotal();
+    title = n ? `${n} change${n === 1 ? '' : 's'} not on the SVS yet` : 'These settings match the SVS';
+    sub = `Read ${c.snapshot.age_s < 60 ? 'just now' : duration(c.snapshot.age_s) + ' ago'} · firmware ${c.snapshot.firmware.replace(/^SVS_FW_/, '')}`;
+    read = true; readLabel = 'Read again'; write = n > 0;
+  }
+  bar.classList.toggle('warn', !idle);
+  text('cfg-title', title);
+  text('cfg-sub', sub);
+  $('cfg-prog').hidden = idle;
+  if (!idle) $('cfg-prog').value = c.progress;
+  $('cfg-read').hidden = !read; text('cfg-read', readLabel);
+  $('cfg-write').hidden = !(c && c.snapshot) || !idle || !connected;
+  $('cfg-write').disabled = !write;
+  const n = pendingTotal();
+  text('cfg-write', n ? `Save ${n} to the SVS` : 'Save to the SVS');
+  if (idle && c && c.result_of !== 'idle' && c.result) {
+    setMsg($('cfg-msg'), c.result, c.result_ok ? 'ok' : 'bad');
+  } else {
+    setMsg($('cfg-msg'), '');
+  }
+}
+
+function renderSwitch() {
+  if (!signedIn) return;
+  syncEdits();
+  const n = inputCount();
+  const warn = svs && svs.connected && svs.total_inputs > 0 && cfg && cfg.snapshot && cfg.snapshot.inputs !== svs.total_inputs;
+  $('stack-warn').hidden = !warn;
+  if (warn) text('stack-warn', `The SVS now counts ${svs.total_inputs} inputs; its settings were read with ${cfg.snapshot.inputs}. Read them again.`);
+  $('stack-hint').hidden = n < 2 && layout.outputs.length < 2;
+  renderStack();
+  const focused = document.activeElement && document.activeElement.id;
+  if (!(focused === 'in-name' || focused === 'out-name')) renderInspector();
+  renderCfgBar();
+}
+
+// --- Layout (kept on the bridge)
+
+async function loadLayout() {
+  try {
+    const l = await api('/device/svs/layout');
+    layout = {inputs: l.inputs || [], outputs: l.outputs || []};
+  } catch (e) { /* keep what we have */ }
+  renderSwitch();
+}
+
+let layoutTimer = null;
+function saveLayout(now) {
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(async () => {
+    try {
+      await post('/device/svs/layout', {inputs: layout.inputs.slice(0, 32), outputs: layout.outputs});
+      setMsg($('layout-msg'), '');
+    } catch (e) {
+      setMsg($('layout-msg'), 'Not saved on the bridge: ' + e.message, 'bad');
+    }
+  }, now ? 0 : 600);
+}
+
+// Moves a module within its own kind; an input takes its SVS settings along
+// (they become changes to save), since the SVS keeps them by position
+function moveItem(group, from, to) {
+  if (from === to) return;
+  const list = group === 'in' ? layout.inputs : layout.outputs;
+  if (group === 'in') layoutInput(Math.max(from, to));
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  if (group === 'in' && edits) edits.splice(to, 0, edits.splice(from, 1)[0]);
+  const t = group === 'in' ? 'in' : 'out';
+  if (sel.t === t) {
+    if (sel.i === from) sel.i = to;
+    else if (from < sel.i && to >= sel.i) sel.i--;
+    else if (from > sel.i && to <= sel.i) sel.i++;
+  }
+  saveLayout(true);
+  renderSwitch();
+}
+
+// --- Settings (stored in the SVS)
+
+let cfgTimer = null;
+async function refreshCfg() {
+  clearTimeout(cfgTimer);
+  cfgTimer = null;
+  if (!signedIn) return;
+  try { cfg = await api('/device/svs/config'); } catch (e) { /* busy */ }
+  const running = cfg && cfg.task !== 'idle';
+  if (!running && listenAfter) {
+    listenAfter = false;
+    try { renderSvs(await post('/device/svs/mode', {send: false})); } catch (e) { /* shown next poll */ }
+  }
+  if (!running && cfgOp) {
+    cfgOp = false;
+    busy({mode: cfg.result_ok ? 'ok' : 'bad', title: cfg.result_ok ? (cfg.result_of === 'reading' ? 'Settings read' : 'Saved to the SVS') : 'That did not work',
+          text: cfg.result + '\n\nPlug the RetroTINK’s HD-15 back in.', actions: [closeAction]});
+  } else if (running && cfgOp) {
+    busy({mode: 'progress', frac: cfg.progress / 100, title: cfg.task === 'reading' ? 'Reading the SVS’s settings' : 'Saving to the SVS',
+          text: cfg.phase + '…\nKeep the HD-15 unplugged until this ends.'});
+  }
+  renderSwitch();
+  if (running) cfgTimer = setTimeout(refreshCfg, 700);
+}
+
+async function cfgStart(kind) {
+  const tx = kind === 'write' && txChanges();
+  const ok = await askUser('Unplug the RetroTINK’s HD-15 first',
+    'The SVS shares one serial line between its USB and the HD-15: while the RetroTINK is plugged in, what the bridge sends arrives garbled.' +
+    (tx ? '\n\nTo change the transcoders the SVS switches to each of those inputs in turn, then back.' : '') +
+    '\n\nPlug it back in when this is done.', kind === 'read' ? 'It’s unplugged, read' : 'It’s unplugged, save');
+  if (!ok) return;
+  try {
+    if (!svs.send_enabled) {
+      renderSvs(await post('/device/svs/mode', {send: true}));
+      listenAfter = true;
+    }
+    cfg = await post(kind === 'read' ? '/device/svs/config/read' : '/device/svs/config/write',
+                     kind === 'read' ? {} : {settings: edits.slice(0, cfg.snapshot.inputs)});
+    cfgOp = true;
+    refreshCfg();
+  } catch (err) {
+    setMsg($('cfg-msg'), err.message, 'bad');
+    if (listenAfter) {
+      listenAfter = false;
+      try { renderSvs(await post('/device/svs/mode', {send: false})); } catch (e) { /* ignore */ }
+    }
+  }
+}
+$('cfg-read').onclick = () => cfgStart('read');
+$('cfg-write').onclick = () => cfgStart('write');
+
+// --- Interaction
+
+let dragJustEnded = false;
+$('stack').addEventListener('click', (e) => {
+  if (dragJustEnded) { dragJustEnded = false; return; }
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.act === 'add-out') {
+    layout.outputs.push({kind: 'component', name: ''});
+    sel = {t: 'out', i: layout.outputs.length - 1};
+    saveLayout(true);
+  } else if (b.dataset.t) {
+    sel = {t: b.dataset.t, i: +b.dataset.i};
+  }
+  renderSwitch();
+});
+
+// Alt+Left/Right moves the selected module (inputs count up to the right,
+// outputs away from the control module, to the left)
+$('stack').addEventListener('keydown', (e) => {
+  const b = e.target.closest('.mod[data-group]');
+  if (!b || !e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  const g = b.dataset.group, i = +b.dataset.i, len = g === 'in' ? inputCount() : layout.outputs.length;
+  const to = i + ((e.key === 'ArrowRight') === (g === 'in') ? 1 : -1);
+  if (to < 0 || to >= len) return;
+  sel = {t: g, i};
+  moveItem(g, i, to);
+  const moved = $('stack').querySelector(`.mod[data-group="${g}"][data-i="${to}"]`);
+  if (moved) moved.focus();
+});
+
+// Dragging: with a mouse at once, on touch after a short hold (so the row
+// still scrolls). A module only drops among modules of its own kind.
+$('stack').addEventListener('pointerdown', (e) => {
+  const tile = e.target.closest('.mod[data-group]');
+  if (!tile || e.button > 0) return;
+  const group = tile.dataset.group, from = +tile.dataset.i;
+  const x0 = e.clientX, y0 = e.clientY;
+  let dragging = false, target = null, cancelled = false;
+  const hold = e.pointerType === 'touch' ? setTimeout(() => begin(), 350) : null;
+  function begin() {
+    if (cancelled || dragging) return;
+    dragging = true;
+    tile.classList.add('dragging');
+    try { tile.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
+  }
+  function tiles() { return [...$('stack').querySelectorAll(`.mod[data-group="${group}"]`)]; }
+  function move(ev) {
+    if (!dragging) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (e.pointerType === 'touch') { end(); return; }  // a scroll, not a hold
+      begin();
+    }
+    ev.preventDefault();
+    tile.style.transform = `translateX(${ev.clientX - x0}px)`;
+    target = null;
+    for (const t of tiles()) {
+      const r = t.getBoundingClientRect();
+      if (t !== tile && ev.clientX >= r.left && ev.clientX <= r.right) target = t;
+    }
+    for (const t of tiles()) t.classList.toggle('drop', t === target);
+  }
+  function noScroll(ev) { if (dragging) ev.preventDefault(); }
+  function end() {
+    cancelled = true;
+    clearTimeout(hold);
+    removeEventListener('pointermove', move);
+    removeEventListener('pointerup', up);
+    removeEventListener('pointercancel', end);
+    removeEventListener('touchmove', noScroll);
+    tile.style.transform = '';
+    tile.classList.remove('dragging');
+    for (const t of tiles()) t.classList.remove('drop');
+  }
+  function up() {
+    const was = dragging;
+    end();
+    if (was) {
+      dragJustEnded = true;
+      setTimeout(() => { dragJustEnded = false; }, 0);
+      if (target) { sel = {t: group, i: from}; moveItem(group, from, +target.dataset.i); }
+    }
+  }
+  addEventListener('pointermove', move, {passive: false});
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', end);
+  addEventListener('touchmove', noScroll, {passive: false});
+});
+
+$('insp').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.kind) {
+    (sel.t === 'in' ? layoutInput(sel.i) : layout.outputs[sel.i]).kind = b.dataset.kind;
+    saveLayout(true);
+  } else if (b.dataset.act === 'del-out') {
+    layout.outputs.splice(sel.i, 1);
+    sel = layout.outputs.length ? {t: 'out', i: Math.max(0, sel.i - 1)} : {t: 'ctl', i: 0};
+    saveLayout(true);
+  } else if (b.dataset.irDel !== undefined) {
+    edits[sel.i].ir.splice(+b.dataset.irDel, 1);
+  } else if (b.dataset.goto !== undefined) {
+    sel = {t: 'in', i: +b.dataset.goto};
+  } else {
+    return;
+  }
+  renderSwitch();
+});
+
+$('insp').addEventListener('input', (e) => {
+  if (e.target.id === 'in-name' || e.target.id === 'out-name') {
+    (sel.t === 'in' ? layoutInput(sel.i) : layout.outputs[sel.i]).name = e.target.value;
+    saveLayout();
+    renderStack();
+  }
+});
+
+$('insp').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.dataset.opt && edits) {
+    edits[sel.i][t.dataset.opt] = t.checked;
+  } else if (t.id === 'ir-remote') {
+    remote = t.value;
+    try { localStorage.setItem('svs-remote', remote); } catch (_) { /* private mode */ }
+  } else if (t.id === 'ir-add' && t.value !== '' && edits) {
+    const b = REMOTES[remote][+t.value];
+    edits[sel.i].ir.push([b[1], b[2]]);
+  } else {
+    return;
+  }
+  renderSwitch();
+});
+
+$('insp').addEventListener('focusout', () => setTimeout(() => {
+  if (!$('insp').contains(document.activeElement)) renderSwitch();
+}, 0));
+
+try { remote = localStorage.getItem('svs-remote') || remote; } catch (_) { /* private mode */ }
+if (!(remote in REMOTES)) remote = Object.keys(REMOTES)[0];
 
 // --- Cruller -------------------------------------------------------------------
 

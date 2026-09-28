@@ -33,8 +33,8 @@ state = {
              "hostname": "svs-bridge.local", "ap_active": False, "ap_ssid": "SVS-Bridge-3F2A"},
     "tls": {"source": "self-signed",
             "fingerprint": ":".join(f"{b:02X}" for b in bytes(range(0xA0, 0xC0)))},
-    "svs": {"connected": True, "firmware": "SVS_FW_1.20", "current_input": 3, "total_inputs": 8,
-            "live": False, "inputs_live": True, "send_enabled": False},
+    "svs": {"connected": True, "firmware": "SVS_FW_1.21", "current_input": 3, "total_inputs": 8,
+            "live": False, "inputs_live": True, "send_enabled": False, "current_input_name": ""},
 }
 
 update = {
@@ -62,6 +62,70 @@ CRULLERS = [
      "host": "cruller-game-room.local", "ip": "192.168.1.62", "port": 80, "version": "0.9.0"},
 ]
 cruller = {"selected": None, "last": None, "count": 0}
+
+# The SVS's own settings (see src/core/svs_config.h): what a read returns. Input 3
+# has a V3 SCART module, input 6 a V3 VGA one; the RGB -> YPbPr transcoder is
+# fitted. Reading and saving take a few seconds.
+def _in(**kw):
+    return {"auto_profile": True, "rgsb": False, "sync_bypass": False,
+            "rgb_to_ypbpr": False, "ypbpr_to_rgb": False, "ir": [], **kw}
+
+
+svs_eeprom = {
+    "transcoders": {"rgb_to_ypbpr": True, "ypbpr_to_rgb": False},
+    "v3": [{"scart": i == 2, "vga": i == 5} for i in range(8)],
+    "settings": [_in(rgb_to_ypbpr=True, ir=[[0x49, 0x0B]]), _in(rgb_to_ypbpr=True, ir=[[0x49, 0x07]]),
+                 _in(rgb_to_ypbpr=True, rgsb=True, ir=[[0x49, 0x03]]), _in(ir=[[0x49, 0x0A]]),
+                 _in(ir=[[0x49, 0x06]]), _in(rgb_to_ypbpr=True, ir=[[0x49, 0x02]]), _in(), _in(auto_profile=False)],
+}
+settings = {"task": "idle", "phase": "", "progress": 0, "result": "", "result_ok": False,
+            "result_of": "idle", "snapshot": None, "seq": 0, "read_at": 0}
+layout = {"inputs": [{"kind": "scart", "name": "Super Nintendo"}, {"kind": "scart", "name": "Mega Drive"},
+                     {"kind": "scart", "name": "PlayStation"}, {"kind": "component", "name": "PlayStation 2"},
+                     {"kind": "component", "name": "GameCube"}, {"kind": "vga", "name": "Dreamcast"},
+                     {"kind": "svideo", "name": "Nintendo 64"}, {"kind": "dterm", "name": "Saturn"}],
+          "outputs": [{"kind": "component", "name": "RetroTINK 4K"}, {"kind": "scart", "name": "Sony PVM"}]}
+
+
+def settings_json():
+    out = {k: settings[k] for k in ("task", "phase", "progress", "result", "result_ok", "result_of")}
+    fw = state["svs"]["firmware"] or ""
+    out["blocker"] = "" if fw >= "SVS_FW_1.20" else "Reading the SVS's settings needs its firmware 1.20 or newer"
+    snap = settings["snapshot"]
+    if snap:
+        snap = {**snap, "age_s": int(time.monotonic() - settings["read_at"])}
+    out["snapshot"] = snap
+    return out
+
+
+def settings_run(task, phases, then):
+    def run():
+        for phase, start, end in phases:
+            for p in range(start, end + 1, 4):
+                settings.update(phase=phase, progress=p)
+                time.sleep(0.08)
+        result = then()
+        settings.update(task="idle", phase="", progress=0, result=result, result_ok=True, result_of=task)
+        log("*", result)
+    settings.update(task=task, phase="Starting", progress=0, result="", result_of="idle")
+    threading.Thread(target=run, daemon=True).start()
+
+
+def settings_read():
+    settings["seq"] += 1
+    settings["read_at"] = time.monotonic()
+    settings["snapshot"] = {"seq": settings["seq"], "firmware": state["svs"]["firmware"], "inputs": 8,
+                            "ir_slots": 250 // 9, **json.loads(json.dumps(svs_eeprom))}
+    return "Read the settings of the SVS's 8 inputs"
+
+
+def settings_write(want):
+    def then():
+        svs_eeprom["settings"] = want
+        settings_read()
+        return "Saved to the SVS"
+    return then
+
 
 START = time.monotonic()
 svs_log = []  # {"seq", "t", "d", "s"}
@@ -228,6 +292,8 @@ class Handler(BaseHTTPRequestHandler):
         return header == "Bearer " + auth["api_token"]
 
     def svs_json(self):
+        n = state["svs"]["current_input"]
+        state["svs"]["current_input_name"] = layout["inputs"][n - 1]["name"] if 0 < n <= len(layout["inputs"]) else ""
         return {**state["svs"], "update": update}
 
     def cruller_json(self):
@@ -296,6 +362,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(self.svs_json())
         elif path == "/device/cruller":
             self.send_json(self.cruller_json())
+        elif path == "/device/svs/config":
+            self.send_json(settings_json())
+        elif path == "/device/svs/layout":
+            self.send_json(layout)
         elif path == "/device/svs/log":
             query = self.path.partition("?")[2]
             after = int(dict(p.split("=", 1) for p in query.split("&") if "=" in p).get("after", 0))
@@ -372,12 +442,17 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/device/cruller/select":
             cruller.update(selected=json.loads(body or b"{}").get("id") or None, last=None, count=0)
             self.send_json(self.cruller_json())
+        elif path == "/device/svs/layout":
+            new = json.loads(body or b"{}")
+            layout.update(inputs=new.get("inputs", []), outputs=new.get("outputs", []))
+            self.send_json(layout)
         elif path == "/device/svs/mode":
             state["svs"]["send_enabled"] = bool(json.loads(body or b"{}").get("send"))
             self.send_json(self.svs_json())
         elif not state["svs"]["send_enabled"] and path in (
                 "/device/svs/send", "/device/svs/restart", "/device/svs/check",
-                "/device/svs/preview", "/device/svs/probe", "/device/svs/firmware/flash"):
+                "/device/svs/preview", "/device/svs/probe", "/device/svs/firmware/flash",
+                "/device/svs/config/read", "/device/svs/config/write"):
             self.send_json({"error": "The bridge is in listen-only mode."}, 403)
         elif path == "/device/svs/restart":
             log("*", "SVS restarted")
@@ -385,6 +460,18 @@ class Handler(BaseHTTPRequestHandler):
                 log("<", line)
             state["svs"].update(current_input=1, live=True)
             self.send_json({"ok": True})
+        elif path == "/device/svs/config/read":
+            settings_run("reading", [("Reading the settings", 0, 40), ("Reading the transcoders", 40, 55),
+                                     ("Reading the IR codes", 55, 100)], settings_read)
+            self.send_json(settings_json())
+        elif path == "/device/svs/config/write":
+            if not settings["snapshot"]:
+                self.send_json({"error": "Read the settings from the SVS first"}, 409)
+                return
+            want = json.loads(body or b"{}").get("settings", [])
+            settings_run("writing", [("Saving the settings", 0, 60), ("Checking what the SVS saved", 60, 100)],
+                         settings_write(want))
+            self.send_json(settings_json())
         elif path == "/device/svs/check":
             start("checking", simulate_check)
             self.send_json(self.svs_json())

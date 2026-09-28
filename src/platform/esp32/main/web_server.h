@@ -36,11 +36,17 @@
 //   POST /device/svs/firmware     [admin] step 2: stage an uploaded .hex (body: the file)
 //   POST /device/svs/firmware/official  [admin] step 2: {"name"}, download and stage a release
 //   POST /device/svs/firmware/flash     [admin] step 3: flash the staged firmware
+//   GET  /device/svs/config       [admin] the SVS's own settings as last read, and read/save progress
+//   POST /device/svs/config/read  [admin] read them from the SVS (in the background)
+//   POST /device/svs/config/write [admin] {"settings": [...]}: save them to the SVS (in the background)
+//   GET  /device/svs/layout       [admin] the modules and outputs as described in the web UI
+//   POST /device/svs/layout       [admin] {"inputs": [...], "outputs": [...]}: store them
 //   GET  /device/cruller          [admin] Crullers found (mDNS), the chosen one, last report
 //   POST /device/cruller/scan     [admin] browse for Crullers again, then as GET
 //   POST /device/cruller/select   [admin] {"id"}: report the active input to it ("" = none)
 //
-// While the SVS is being flashed, OTA, reboot and factory reset are refused.
+// While the SVS is being flashed, OTA, reboot and factory reset are refused;
+// while its settings are read or saved, other traffic to it is refused.
 //
 // HTTP (80), only while the setup access point is up: the setup portal page
 // (step 1: create or enter the admin password, step 2: WiFi) and the

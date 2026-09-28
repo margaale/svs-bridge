@@ -8,7 +8,7 @@ CXX="${CXX:-g++}"
 CXXFLAGS=(-std=c++17 -Wall -Wextra -Werror -O1 -g -I src/core)
 mkdir -p build-tests
 
-tests=(test_svs_vectors test_svs_hex test_svs_protocol)
+tests=(test_svs_vectors test_svs_hex test_svs_protocol test_svs_config)
 for t in "${tests[@]}"; do
     "$CXX" "${CXXFLAGS[@]}" "tests/$t.cpp" -o "build-tests/$t"
 done

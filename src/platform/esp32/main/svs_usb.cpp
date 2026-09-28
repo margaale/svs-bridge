@@ -73,7 +73,16 @@ static bool s_restart_on_boot = false;
 static const int FIRST_BANNER_WAIT_MS = 4000;
 
 static esp_err_t do_restart_svs();          // the DTR reset pulse, without the send gate
-static esp_err_t do_send(const std::string &cmd);  // write a command, without the send gate
+static esp_err_t do_send(const std::string &cmd, bool log = true);  // write a command, without the send gate
+
+// A settings session (see session_begin): the SVS's answers go to s_answers
+// instead of the log
+struct Answer {
+    char text[64];
+};
+static volatile bool s_session = false;
+static QueueHandle_t s_answers;
+static SemaphoreHandle_t s_query_mutex;
 
 static int64_t now_ms() { return esp_timer_get_time() / 1000; }
 
@@ -203,7 +212,8 @@ static StatusFilter s_status_filter;
 static void print_line(std::string &line)
 {
     printf("%8lld ms  SVS > %s\n", now_ms(), line.c_str());
-    if (!only_control_chars(line) && !s_status_filter.is_repeated(line)) {
+    bool answer = s_session && line.rfind("SVS", 0) != 0;  // kept out of the log
+    if (!answer && !only_control_chars(line) && !s_status_filter.is_repeated(line)) {
         log_add('<', line);
     }
     line.clear();
@@ -271,6 +281,11 @@ static void rx_print_task(void *arg)
             uint8_t c = buf[i];
             if (c == '\n' || c == '\r') {
                 if (!parsed.empty()) {
+                    if (s_session && parsed.rfind("SVS", 0) != 0) {
+                        Answer a = {};
+                        strlcpy(a.text, parsed.c_str(), sizeof(a.text));
+                        xQueueSend(s_answers, &a, 0);
+                    }
                     parse_line(parsed);
                     parsed.clear();
                 }
@@ -413,6 +428,8 @@ void start()
     s_rx_stream = xStreamBufferCreate(4096, 1);
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
+    s_answers = xQueueCreate(8, sizeof(Answer));
+    s_query_mutex = xSemaphoreCreateMutex();
 
     // Always start in listen-only. Send mode (commands and firmware flashing) is
     // not persisted: it must be re-enabled after each boot, so the bridge never
@@ -509,7 +526,7 @@ esp_err_t restart_svs()
     return do_restart_svs();
 }
 
-static esp_err_t do_send(const std::string &cmd)
+static esp_err_t do_send(const std::string &cmd, bool log)
 {
     std::string out = cmd + EOL;
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
@@ -521,7 +538,9 @@ static esp_err_t do_send(const std::string &cmd)
     xSemaphoreGive(s_dev_mutex);
     if (err == ESP_OK) {
         printf("%8lld ms  SVS < %s\n", now_ms(), cmd.c_str());
-        log_add('>', cmd);
+        if (log) {
+            log_add('>', cmd);
+        }
     } else {
         log_add('*', "Could not send " + cmd + ": " + esp_err_to_name(err));
     }
@@ -534,6 +553,52 @@ esp_err_t send(const std::string &cmd)
         return ESP_ERR_NOT_SUPPORTED;
     }
     return do_send(cmd);
+}
+
+// ---------------------------------------------------------------------------
+// Settings sessions
+// ---------------------------------------------------------------------------
+
+void session_begin()
+{
+    xQueueReset(s_answers);
+    s_session = true;
+}
+
+void session_end()
+{
+    s_session = false;
+}
+
+esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms)
+{
+    if (!s_send_allowed) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    if (!s_session) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(s_query_mutex, portMAX_DELAY);
+    xQueueReset(s_answers);  // a late answer to an earlier command
+    esp_err_t err = do_send(cmd, false);
+    if (err == ESP_OK) {
+        Answer a;
+        if (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
+            answer = a.text;
+        } else {
+            err = ESP_ERR_TIMEOUT;
+        }
+    }
+    xSemaphoreGive(s_query_mutex);
+    return err;
+}
+
+esp_err_t send_quiet(const std::string &cmd)
+{
+    if (!s_send_allowed) {
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+    return do_send(cmd, !s_session);
 }
 
 // ---------------------------------------------------------------------------
