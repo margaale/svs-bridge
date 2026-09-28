@@ -7,12 +7,10 @@
 //
 //   POST http://<host>:<port>/api/svs
 //   {"id": "svs-bridge-...", "current_input": 3, "total_inputs": 8, "live": true,
-//    "firmware": "SVS_FW_1.21",
-//    "inputs": [{"kind": "scart", "name": "Super Nintendo", "auto_profile": true, ...}],
-//    "outputs": [{"kind": "component", "name": "RetroTINK 4K"}]}
+//    "inputs": [{"kind": "scart", "name": "Super Nintendo"}, ...]}
 //
-// on every input change, whenever the switch's description changes (the
-// layout, or the settings read from the SVS), as soon as it finds the Cruller
+// (each input's module and what is connected to it, from the layout) on every
+// input change, whenever the layout changes, as soon as it finds the Cruller
 // (also when it announces itself again after a restart), and every 60 s in case
 // a report was lost. Cruller answers {"ok": true, "changed": bool}, or 409 when it is
 // already paired with another SVS Bridge.

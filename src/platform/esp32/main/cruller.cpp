@@ -177,41 +177,18 @@ void scan()
 // Reporting
 // ---------------------------------------------------------------------------
 
-// The switch as the SVS tab sets it up, for Cruller: the SVS's firmware, each input and output with
-// its module and name (the layout), and the input settings read from the SVS, once they have been
-// read. An object: {"firmware", "inputs": [...], "outputs": [...]}.
-static std::string describe_switch(const svs_usb::Info &info)
+// The switch as the SVS tab sets it up, for Cruller: each input's module and what is connected to
+// it (the layout), as {"inputs": [{"kind", "name"}, ...]}. An empty list if no layout is saved.
+static std::string describe_switch()
 {
     JsonDocument layout;
     if (deserializeJson(layout, svs_settings::layout_json()) != DeserializationError::Ok) {
         layout.clear();
     }
-    const svs_settings::Snapshot sn = svs_settings::status().snapshot;
-    const int read = sn.valid ? sn.inputs : 0;
-
     JsonDocument doc;
-    doc["firmware"] = info.firmware;
-    JsonArrayConst names = layout["inputs"].as<JsonArrayConst>();
     JsonArray inputs = doc["inputs"].to<JsonArray>();
-    const int n = std::max((int)names.size(), read);
-    for (int i = 0; i < n; i++) {
-        JsonObjectConst l = names[i].as<JsonObjectConst>();
+    for (JsonObjectConst l : layout["inputs"].as<JsonArrayConst>()) {
         JsonObject o = inputs.add<JsonObject>();
-        o["kind"] = l["kind"] | "";
-        o["name"] = l["name"] | "";
-        if (i < read) {  // only what was read from the SVS: absent means not known
-            const svs_config::InputSettings &in = sn.settings[i];
-            o["auto_profile"] = in.auto_profile;
-            o["rgsb"] = in.rgsb;
-            o["sync_bypass"] = in.sync_bypass;
-            o["rgb_to_ypbpr"] = in.rgb_to_ypbpr;
-            o["ypbpr_to_rgb"] = in.ypbpr_to_rgb;
-            o["v3"] = (bool)sn.hardware.scart_v3[i] || (bool)sn.hardware.vga_v3[i];
-        }
-    }
-    JsonArray outputs = doc["outputs"].to<JsonArray>();
-    for (JsonObjectConst l : layout["outputs"].as<JsonArrayConst>()) {
-        JsonObject o = outputs.add<JsonObject>();
         o["kind"] = l["kind"] | "";
         o["name"] = l["name"] | "";
     }
@@ -360,8 +337,8 @@ static void task(void *arg)
         }
 
         int64_t now = now_ms();
-        if (now >= next_describe) {  // the layout edited, the SVS's settings read or saved
-            described = describe_switch(info);
+        if (now >= next_describe) {  // the layout edited
+            described = describe_switch();
             next_describe = now + DESCRIBE_MS;
         }
         bool due = sent_to != target.id || info.current_input != sent_input ||
