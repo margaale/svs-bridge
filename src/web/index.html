@@ -811,14 +811,14 @@ const IN_KINDS = {
   scart: ['SCART', 'SCART', 'RGBS, RGsB, YPbPr'],
   component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
   vga: ['VGA', 'VGA', 'HD-15, audio jack'],
-  svideo: ['S-Video', 'S-VIDEO', 'Composite, stereo audio'],
+  svideo: ['S-Video / Composite', 'S-VIDEO/CV', 'S-Video, composite, stereo audio'],
   dterm: ['D-Terminal', 'D-TERM', 'Japanese YPbPr, stereo'],
 };
 const OUT_KINDS = {
   scart: ['SCART', 'SCART', 'RGB or YPbPr'],
   component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
   vga: ['VGA', 'VGA', 'HD-15, audio jack'],
-  svideo: ['S-Video', 'S-VIDEO', 'Composite, stereo audio'],
+  svideo: ['S-Video / Composite', 'S-VIDEO/CV', 'S-Video, composite, stereo audio'],
   bnc: ['BNC', 'BNC', 'R, G, B, H/CS, V'],
 };
 const MAX_OUTPUTS = 6;
@@ -963,23 +963,20 @@ const OUT_DEVICES = [
 const MODULE_SIGNALS = {scart: ['rgb', 'ypbpr'], component: ['ypbpr'], vga: ['vga', 'rgb'], svideo: ['yc', 'cv'], dterm: ['dterm']};
 const listSignals = (sig) => sig.map((x) => SIGNALS[x]).join(', ').replace(/, ([^,]*)$/, ' or $1');
 
-// A console or device picker plus the name shown for it
-function devicePicker(id, list, cur, name, groups) {
+// A console or device picker
+function devicePicker(id, list, cur, groups) {
   const opt = (d) => `<option value="${d.id}"${d.id === cur ? ' selected' : ''}>${esc(d.name)}</option>`;
-  const other = !cur && name;
   return `<select id="${id}"><option value="">Choose…</option>` +
     (groups ? groups.filter((g) => g[1].length).map(([label, ds]) => `<optgroup label="${esc(label)}">${ds.map(opt).join('')}</optgroup>`).join('') : list.map(opt).join('')) +
-    `<option value="-"${other ? ' selected' : ''}>Something else: type its name</option></select>`;
+    '</select>';
 }
 
-// Picking a device names the module after it, unless it has a name of its own
+// The module takes the device's name (what Home Assistant shows)
 function pickDevice(entry, id, list) {
-  const prev = list.find((d) => d.id === entry.device);
-  const next = list.find((d) => d.id === id);
-  if (next && (!entry.name || (prev && entry.name === prev.name))) entry.name = next.name;
-  if (!next && prev && entry.name === prev.name) entry.name = '';
-  entry.device = next ? next.id : '';
-  if (!entry.device) delete entry.device;
+  const d = list.find((x) => x.id === id);
+  entry.name = d ? d.name : '';
+  if (d) entry.device = d.id;
+  else delete entry.device;
 }
 
 function readSettings() { return cfg && cfg.snapshot ? cfg.snapshot.settings : null; }
@@ -1064,7 +1061,7 @@ function renderStack() {
     }
     const k = OUT_KINDS[o.kind] || OUT_KINDS.component, num = outNumber(i);
     return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + num}),
-                    kind: k[1], color: 'var(--blue)', name: o.name, empty: 'Not set',
+                    kind: k[1], color: 'var(--blue)', name: o.name, empty: 'Nothing picked',
                     aria: `Output ${num}, ${k[0]}${o.name ? ', to ' + o.name : ''}`});
   }).reverse().join('');
   const nOut = outputCount();
@@ -1074,7 +1071,7 @@ function renderStack() {
     const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
     return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
                     svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
-                    kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'No name', pending: changes(i) > 0,
+                    kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'Nothing picked', pending: changes(i) > 0,
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
   }).join('');
   const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
@@ -1130,15 +1127,14 @@ function renderInspector() {
     const fits = (c) => c.signals.some((x) => takes.includes(x));
     const con = CONSOLES.find((c) => c.id === li.device);
     const groups = k.unset ? [['Consoles', CONSOLES]]
-      : [[`Fits a ${k.name} module`, CONSOLES.filter(fits)], ['Other consoles', CONSOLES.filter((c) => !fits(c))]];
+      : [[`Fits this ${k.name} module`, CONSOLES.filter(fits)], ['Other consoles', CONSOLES.filter((c) => !fits(c))]];
     const fitNote = !con ? 'Shown in Home Assistant with the active input.'
       : k.unset ? `A ${con.name} sends ${listSignals(con.signals)}.`
       : fits(con) ? `Sends ${listSignals(con.signals.filter((x) => takes.includes(x)))} to this ${k.name} module.`
-      : `Stock, a ${con.name} sends ${listSignals(con.signals)}, and a ${k.name} module takes ${listSignals(takes)}. Fine if it is modded or goes through an adapter.`;
+      : `Stock, a ${con.name} sends ${listSignals(con.signals)}, and this ${k.name} module takes ${listSignals(takes)}. Fine if it is modded or goes through an adapter.`;
     el.innerHTML = `<div class="insp-face">${face(k.kind, 'in', {lit, tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
       `<div class="insp-body"><div class="row"><h3 class="grow">Input ${i + 1}</h3>${lit ? '<span class="chip" style="border-color:var(--accent);color:#F28BAA"><span class="dot" style="background:var(--accent)"></span>On screen now</span>' : ''}</div>` +
-      `<div class="stack"><div class="two"><div class="stack"><label class="lbl" for="in-dev">What is plugged in</label>${devicePicker('in-dev', CONSOLES, li.device, li.name, groups)}</div>` +
-      `<div class="stack"><label class="lbl" for="in-name">Name</label><input id="in-name" type="text" maxlength="32" placeholder="e.g. Super Nintendo" value="${esc(li.name)}"></div></div>` +
+      `<div class="stack"><label class="lbl" for="in-dev">What is plugged in</label>${devicePicker('in-dev', CONSOLES, li.device, groups)}` +
       `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
@@ -1161,8 +1157,7 @@ function renderInspector() {
     const i = sel.i, o = layout.outputs[i], num = outNumber(i), by = txBefore(i);
     el.innerHTML = `<div class="insp-face">${face(o.kind, 'out', {tag: 'OUT ' + num})}</div>` +
       `<div class="insp-body"><div class="row"><h3 class="grow">Output ${num}</h3><button type="button" class="danger" data-act="del-out">Remove output</button></div>` +
-      `<div class="two"><div class="stack"><label class="lbl" for="out-dev">Connected to</label>${devicePicker('out-dev', OUT_DEVICES, o.device, o.name)}</div>` +
-      `<div class="stack"><label class="lbl" for="out-name">Name</label><input id="out-name" type="text" maxlength="32" placeholder="e.g. RetroTINK 4K" value="${esc(o.name)}"></div></div>` +
+      `<div class="stack"><label class="lbl" for="out-dev">Connected to</label>${devicePicker('out-dev', OUT_DEVICES, o.device)}</div>` +
       `<div class="stack"><span class="lbl">Module</span><div class="pick out" role="radiogroup" aria-label="Output module">` +
       Object.entries(OUT_KINDS).map(([id, kk]) => `<button type="button" role="radio" aria-checked="${id === o.kind}" data-kind="${id}">${face(id, 'out')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
       `</div></div><div class="stack"><span class="lbl">Transcoders</span><div class="small" style="font-size:14px;color:var(--soft)">` +
@@ -1239,8 +1234,7 @@ function renderSwitch() {
   if (warn) text('stack-warn', `The SVS now counts ${svs.total_inputs} inputs; its settings were read with ${cfg.snapshot.inputs}. Read them again.`);
   $('stack-hint').hidden = n < 2 && layout.outputs.length < 2;
   renderStack();
-  const focused = document.activeElement && document.activeElement.id;
-  if (!(focused === 'in-name' || focused === 'out-name')) renderInspector();
+  renderInspector();
   renderCfgBar();
 }
 
@@ -1451,25 +1445,12 @@ $('insp').addEventListener('click', (e) => {
   renderSwitch();
 });
 
-$('insp').addEventListener('input', (e) => {
-  if (e.target.id === 'in-name' || e.target.id === 'out-name') {
-    (sel.t === 'in' ? layoutInput(sel.i) : layout.outputs[sel.i]).name = e.target.value;
-    saveLayout();
-    renderStack();
-  }
-});
-
 $('insp').addEventListener('change', (e) => {
   const t = e.target;
   if (t.id === 'in-dev' || t.id === 'out-dev') {
     const input = t.id === 'in-dev', entry = input ? layoutInput(sel.i) : layout.outputs[sel.i];
-    pickDevice(entry, t.value === '-' ? '' : t.value, input ? CONSOLES : OUT_DEVICES);
+    pickDevice(entry, t.value, input ? CONSOLES : OUT_DEVICES);
     saveLayout(true);
-    if (t.value === '-') {
-      renderSwitch();
-      $(input ? 'in-name' : 'out-name').focus();
-      return;
-    }
   } else if (t.dataset.opt && edits) {
     edits[sel.i][t.dataset.opt] = t.checked;
   } else if (t.id === 'ir-remote') {
