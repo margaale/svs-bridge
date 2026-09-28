@@ -48,6 +48,38 @@ static int64_t now_ms(void) {
     return esp_timer_get_time() / 1000;
 }
 
+// Up to `max` bytes as hex ("FF FB 00 ..."), for the traffic log
+static std::string hex(const uint8_t *p, size_t len, size_t max = 24) {
+    std::string out;
+    char b[4];
+    for (size_t i = 0; i < len && i < max; i++) {
+        snprintf(b, sizeof(b), i ? " %02X" : "%02X", p[i]);
+        out += b;
+    }
+    if (len > max) out += " ...";
+    return out;
+}
+
+// Text as it came, control characters as <XX>, for the traffic log
+static std::string printable(const uint8_t *p, size_t len) {
+    std::string out;
+    char b[8];
+    for (size_t i = 0; i < len && out.size() < 96; i++) {
+        if (p[i] >= 0x20 && p[i] < 0x7F) {
+            out += (char)p[i];
+        } else {
+            snprintf(b, sizeof(b), "<%02X>", p[i]);
+            out += b;
+        }
+    }
+    return out;
+}
+
+// A note in the web UI's traffic log (not forwarded to the clients, which only get what the SVS says)
+static void note(const client_t *c, const std::string &text) {
+    svs_usb::log_note(std::string("RFC2217 ") + c->ip + ": " + text);
+}
+
 static bool send_all(int fd, const uint8_t *p, size_t len) {
     while (len) {
         const int n = send(fd, p, len, 0);
@@ -79,6 +111,7 @@ static void drop_client(client_t *c, const char *why) {
     c->fd = -1;
     c->line_len = 0;
     printf("rfc2217: client %s %s\n", c->ip, why);
+    note(c, std::string("client ") + why);
     c->ip[0] = 0;
 }
 
@@ -96,6 +129,7 @@ static void flush_line(client_t *c) {
                       : err == ESP_ERR_NOT_SUPPORTED ? "listen-only mode"
                       : err == ESP_ERR_NOT_ALLOWED   ? "SVS firmware update in progress"
                                                      : "send error";
+    if (why) note(c, std::string("not sent to the SVS (") + why + "): " + cmd);
     if (why && !send_text(c, std::string("(") + why + ", not sent: " + cmd + ")\r\n")) drop_client(c, "failed");
 }
 
@@ -136,8 +170,12 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     c->modem_sent = -1;
     c->line_len = 0;
     const size_t n = rfc2217_greeting(&c->proto, buf, size);
-    if (!send_all(fd, buf, n)) drop_client(c, "failed");
-    else printf("rfc2217: client %s connected\n", c->ip);
+    if (!send_all(fd, buf, n)) {
+        drop_client(c, "failed");
+    } else {
+        printf("rfc2217: client %s connected\n", c->ip);
+        note(c, "client connected; sent " + hex(buf, n) + " (Telnet options)");
+    }
 }
 
 static void rfc2217_task(void *param) {
@@ -193,6 +231,10 @@ static void rfc2217_task(void *param) {
                 io.reply = reply;
                 io.reply_max = sizeof(reply);
                 rfc2217_input(&c->proto, in, (size_t)n, &io, modem);
+                // What the client sent: its Telnet/RFC 2217 negotiation and any text, and the answer
+                note(c, "received " + std::to_string(n) + " bytes: " + hex(in, (size_t)n) +
+                            (io.data_len ? " (text: \"" + printable(data, io.data_len) + "\")" : "") +
+                            (io.reply_len ? "; answered " + hex(reply, io.reply_len) : ""));
                 if (io.reply_len && !send_all(c->fd, reply, io.reply_len)) {
                     drop_client(c, "failed");
                     continue;
