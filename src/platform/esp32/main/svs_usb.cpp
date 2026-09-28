@@ -612,9 +612,7 @@ esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms
 
 esp_err_t query_all(const std::string &cmd, std::vector<std::string> &lines, uint32_t window_ms)
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
+    // Only inside a session, which svs_settings starts after its own checks
     if (!s_session) {
         return ESP_ERR_INVALID_STATE;
     }
