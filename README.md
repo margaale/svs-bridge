@@ -163,7 +163,8 @@ POST http://<host>:<port>/api/svs
 Content-Type: application/json
 
 {"id": "svs-bridge-aabbccddeeff", "current_input": 3, "total_inputs": 8, "live": true,
- "inputs": [{"kind": "scart", "name": "Super Nintendo"}, {"kind": "component", "name": "PS2"}, ...]}
+ "inputs": [{"kind": "scart", "name": "Super Nintendo / Super Famicom", "device": "snes"}, ...],
+ "output": {"kind": "component", "name": "RetroTINK 4K", "device": "rt4k"}}
 ```
 
 on every input change, whenever the layout changes, as soon as it finds the
@@ -171,8 +172,11 @@ Cruller (also when it announces itself again after a restart), and every 60 s in
 case a report was lost (every 10 s while it cannot reach it). Nothing is sent
 until the SVS has reported its input.
 
-`inputs` is the SVS tab's layout: each input's module and what is connected to
-it (an empty list if none is saved). Cruller shows it in its own SVS tab.
+`inputs` is the SVS tab's layout: each input's module and the console or device
+picked for it (`device` is its id in the web UI's list, `""` if none; an empty
+list if no layout is saved). `output` is the output whose device is a RetroTINK
+4K (`rt4k` or `rt4kce`), or `null` if none is. Cruller shows them in its own SVS
+tab, the consoles as icons.
 
 A Cruller keeps the first bridge that reports to it and answers others with
 `409`; the tab then says it is paired with another bridge. Press **Unpair** in
