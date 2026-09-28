@@ -7,6 +7,7 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdint.h>
 
 // Call once the network stack is up.
 void rfc2217_start(void);
@@ -16,3 +17,16 @@ void rfc2217_clients(char *out, size_t size);
 
 // Connected clients, and the most allowed in *max.
 int rfc2217_count(int *max);
+
+// What each connected client has done, for the web UI (a snapshot; up to max, returns how many).
+typedef struct {
+    char ip[16];
+    uint16_t port;
+    uint32_t connected_s;   // since it connected
+    uint32_t idle_s;        // since it last sent anything
+    uint32_t rx, tx;        // bytes from / to it
+    uint32_t commands;      // lines sent to the SVS
+    uint32_t refused;       // lines not sent (listen-only mode, SVS not connected, ...)
+} rfc2217_info_t;
+
+int rfc2217_info(rfc2217_info_t *out, int max);

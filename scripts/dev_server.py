@@ -342,6 +342,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/device/scan":
             time.sleep(1.5)
             self.send_json(NETWORKS)
+        elif path == "/device/clients":
+            self.send_json({"port": 2217, "max": 3, "clients": [
+                {"ip": "192.168.1.40", "port": 51544, "connected_s": uptime_ms() // 1000, "idle_s": 12,
+                 "rx": 214, "tx": 3480, "commands": 2, "refused": 1}]})
         elif path == "/device/api-token":
             self.send_json({"token": auth["api_token"]})
         elif path == "/device/releases":

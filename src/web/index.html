@@ -366,6 +366,14 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 </div>
 </div>
 </div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Serial console clients (RFC 2217)</h2><span class="small" id="cl-n">–</span></div>
+<div class="clist" id="cl-list"></div>
+<div class="small" id="cl-empty">No client connected. Connect to <span class="mono">rfc2217://svs-bridge.local:2217</span> (e.g. pyserial): clients see what the SVS says, and the lines they send go to the SVS.</div>
+<div class="note warn" id="cl-listen" hidden>The bridge is in listen-only mode: lines from these clients are not sent to the SVS. Turn on sending in the SVS tab's Control panel (with the RetroTINK's HD-15 unplugged).</div>
+<div class="small">Each connection, what it sends and why a line was not passed on also go to the SVS tab's serial log.</div>
+</div>
 </section>
 
 <!-- Home Assistant -->
@@ -563,7 +571,7 @@ function route() {
   for (const a of document.querySelectorAll('nav.tabs a')) a.toggleAttribute('aria-current', a.dataset.tab === tab);
   $('chip-svs').hidden = tab === 'bridge';
   $('chip-wifi').hidden = $('chip-ver').hidden = !$('chip-svs').hidden;
-  if (signedIn && tab === 'bridge') fwLoadReleases();
+  if (signedIn && tab === 'bridge') { fwLoadReleases(); refreshClients(); }
   if (signedIn && tab === 'cruller') refreshCruller();
 }
 addEventListener('hashchange', route);
@@ -667,6 +675,33 @@ setInterval(showUptime, 1000);
 
 async function refresh() {
   try { render(await api('/api/status')); } catch (e) { /* device busy or rebooting */ }
+  if (tab === 'bridge') refreshClients();
+}
+
+// --- RFC 2217 clients (Bridge tab) -------------------------------------------
+
+function bytes(n) {
+  return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+}
+
+async function refreshClients() {
+  let c;
+  try { c = await api('/device/clients'); } catch (e) { return; }
+  const list = $('cl-list');
+  list.textContent = '';
+  text('cl-n', c.clients.length + ' of ' + c.max + ' connected');
+  $('cl-empty').hidden = c.clients.length > 0;
+  for (const k of c.clients) {
+    const row = document.createElement('div');
+    row.className = 'crow';
+    const cmds = k.commands + ' command' + (k.commands === 1 ? '' : 's') + ' sent' +
+      (k.refused ? ', <span class="warn">' + k.refused + ' not sent</span>' : '');
+    row.innerHTML = `<div class="grow" style="min-width:0"><div class="cn mono">${esc(k.ip)}:${k.port}</div>` +
+      `<div class="small">connected ${duration(k.connected_s)} · last heard ${k.idle_s ? duration(k.idle_s) + ' ago' : 'now'} · ` +
+      `${bytes(k.rx)} in, ${bytes(k.tx)} out · ${cmds}</div></div>`;
+    list.appendChild(row);
+  }
+  $('cl-listen').hidden = !(c.clients.length && svs && !svs.send_enabled);
 }
 
 // --- SVS --------------------------------------------------------------------
