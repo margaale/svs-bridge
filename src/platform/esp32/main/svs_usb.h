@@ -66,6 +66,11 @@ void session_end();
 // session. Same errors as send(), plus ESP_ERR_TIMEOUT.
 esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms);
 
+// Sends a command inside a session and collects every line the SVS sends for
+// window_ms afterwards, its "SVS ..." status lines included, as received. For
+// diagnosing answers whose format is not known. Same errors as send().
+esp_err_t query_all(const std::string &cmd, std::vector<std::string> &lines, uint32_t window_ms);
+
 // Sends a command inside a session, without logging it. Same errors as send().
 esp_err_t send_quiet(const std::string &cmd);
 
