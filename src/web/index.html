@@ -370,7 +370,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 <div class="row"><h2 class="grow">Serial console clients (RFC 2217)</h2><span class="small" id="cl-n">–</span></div>
 <div class="clist" id="cl-list"></div>
 <div class="small" id="cl-empty">No client connected. Connect to <span class="mono">rfc2217://svs-bridge.local:2217</span> (e.g. pyserial): clients see what the SVS says, and the lines they send go to the SVS.</div>
-<div class="note warn" id="cl-listen" hidden>The bridge is in listen-only mode: lines from these clients are not sent to the SVS. Turn on sending in the SVS tab's Control panel (with the RetroTINK's HD-15 unplugged).</div>
+<div class="note" id="cl-listen" hidden>What these clients send reaches the SVS only with the RetroTINK's HD-15 unplugged: the SVS shares that line.</div>
 <div class="small">Each connection, what it sends and why a line was not passed on also go to the SVS tab's serial log.</div>
 </div>
 </section>
@@ -700,7 +700,7 @@ async function refreshClients() {
       `${bytes(k.rx)} in, ${bytes(k.tx)} out · ${cmds}</div></div>`;
     list.appendChild(row);
   }
-  $('cl-listen').hidden = !(c.clients.length && svs && !svs.send_enabled);
+  $('cl-listen').hidden = !c.clients.length;
 }
 
 // --- SVS --------------------------------------------------------------------

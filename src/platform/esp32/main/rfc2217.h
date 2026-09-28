@@ -26,7 +26,7 @@ typedef struct {
     uint32_t idle_s;        // since it last sent anything
     uint32_t rx, tx;        // bytes from / to it
     uint32_t commands;      // lines sent to the SVS
-    uint32_t refused;       // lines not sent (listen-only mode, SVS not connected, ...)
+    uint32_t refused;       // lines not sent (SVS not connected, firmware update, ...)
 } rfc2217_info_t;
 
 int rfc2217_info(rfc2217_info_t *out, int max);
