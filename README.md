@@ -51,7 +51,7 @@ Utility for day-to-day settings:
   SCART/VGA modules and transcoders; pick the other modules (SCART, Component,
   VGA, S-Video/composite, D-Terminal) and add the outputs (SCART, Component,
   VGA, S-Video/composite, BNC, up to 6), and pick the console or device on
-  each (or type a name): the list puts first the consoles that fit the module
+  each (it names the module): the list puts first the consoles that fit the module
   and warns when one does not send what the module takes. Drag a module to
   move it, inputs among inputs and outputs among outputs (Alt+←/→ with the
   keyboard). Transcoders move among the outputs too: one converts only the
