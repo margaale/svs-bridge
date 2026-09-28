@@ -5,8 +5,8 @@
 // no ESP-IDF, mirroring the independent Python check we validated against a real
 // SVS. Build and run (from the repo root):
 //
-//   g++ -std=c++17 -Wall -Wextra -Imain -o test_svs_vectors test/host/test_svs_vectors.cpp
-//   ./test_svs_vectors
+//   g++ -std=c++17 -Wall -Wextra -Isrc/core -o test_svs_vectors tests/test_svs_vectors.cpp
+//   ./test_svs_vectors   (or tests/run.sh for all of them)
 
 #include "svs_vectors.h"
 

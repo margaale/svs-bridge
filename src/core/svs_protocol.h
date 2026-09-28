@@ -3,7 +3,7 @@
 // The SVS prints its banner on boot and repeats status lines every ~2 s; an
 // input change is announced with "SVS NEW INPUT=n". Detecting that change is
 // the whole point of the Home Assistant integration, so the pure parsing lives
-// here and is unit-tested on the host (see test/host/test_svs_protocol.cpp).
+// here and is unit-tested on the host (see tests/test_svs_protocol.cpp).
 // Pure: no ESP-IDF, no I/O, no globals.
 #pragma once
 

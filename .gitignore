@@ -1,15 +1,12 @@
 build/
-managed_components/
-sdkconfig
-sdkconfig.old
+build-tests/
+.ccache/
+src/platform/esp32/managed_components/
 
 # Local-only tooling and editor config (machine-specific paths)
 .vscode/
 .claude/
 eim_config.toml
 
-# Version comes from git/GitVersion in CI (written transiently before the build)
-version.txt
-
-# Python bytecode (host tests, dev server)
+# Python bytecode (dev server)
 __pycache__/

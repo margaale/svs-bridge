@@ -1,6 +1,6 @@
 """Development server for the web UI, with a mocked device API.
 
-Serves the pages in main/web as the bridge would, so the UI can be worked on
+Serves the pages in src/web as the bridge would, so the UI can be worked on
 without hardware:
 
     http://localhost:8080/         index.html (the bridge serves it over HTTPS)
@@ -9,7 +9,7 @@ without hardware:
 The mock admin password is "password" (setting a new one in the setup flow
 replaces it). A simulated SVS flash takes a few seconds.
 
-Run with any Python 3:  python tools/dev_server.py [port]
+Run with any Python 3:  python scripts/dev_server.py [port]
 """
 
 import hashlib
@@ -21,9 +21,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-WEB = Path(__file__).resolve().parent.parent / "main" / "web"
+WEB = Path(__file__).resolve().parent.parent / "src" / "web"
 # Served at /dev/svs_bridge.bin to try the bridge update form with a real image
-BUILD_BIN = Path(__file__).resolve().parent.parent / "build" / "svs_bridge.bin"
+BUILD_BIN = Path(__file__).resolve().parent.parent / "build" / "esp32" / "svs_bridge.bin"
 PAGES = {"/": "index.html", "/portal": "portal.html"}
 
 state = {

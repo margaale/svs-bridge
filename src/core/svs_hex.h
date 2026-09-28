@@ -3,7 +3,7 @@
 // Turns an uploaded/downloaded .hex file (untrusted input) into the flash image
 // that will be written to the SVS, validating every record's length, checksum,
 // type and address range. A bug here could flash garbage, so it is unit-tested
-// on the host (see test/host/test_svs_hex.cpp). Pure: no ESP-IDF, no I/O.
+// on the host (see tests/test_svs_hex.cpp). Pure: no ESP-IDF, no I/O.
 #pragma once
 
 #include <cstdint>

@@ -2,8 +2,8 @@
 // untrusted .hex file into the bytes flashed to the SVS, so malformed input
 // must be rejected rather than producing a bad image.
 //
-//   g++ -std=c++17 -Wall -Wextra -Imain -o test_svs_hex test/host/test_svs_hex.cpp
-//   ./test_svs_hex
+//   g++ -std=c++17 -Wall -Wextra -Isrc/core -o test_svs_hex tests/test_svs_hex.cpp
+//   ./test_svs_hex   (or tests/run.sh for all of them)
 
 #include "svs_hex.h"
 

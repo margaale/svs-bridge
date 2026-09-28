@@ -2,8 +2,8 @@
 // Detecting the active-input change is the core of the Home Assistant feature,
 // so the classification and de-duplication are pinned here.
 //
-//   g++ -std=c++17 -Wall -Wextra -Imain -o test_svs_protocol test/host/test_svs_protocol.cpp
-//   ./test_svs_protocol
+//   g++ -std=c++17 -Wall -Wextra -Isrc/core -o test_svs_protocol tests/test_svs_protocol.cpp
+//   ./test_svs_protocol   (or tests/run.sh for all of them)
 
 #include "svs_protocol.h"
 
