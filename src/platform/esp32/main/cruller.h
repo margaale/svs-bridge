@@ -7,10 +7,12 @@
 //
 //   POST http://<host>:<port>/api/svs
 //   {"id": "svs-bridge-...", "current_input": 3, "total_inputs": 8, "live": true,
-//    "inputs": [{"kind": "scart", "name": "Super Nintendo"}, ...]}
+//    "inputs": [{"kind": "scart", "name": "Super Nintendo / Super Famicom", "device": "snes"}, ...],
+//    "output": {"kind": "component", "name": "RetroTINK 4K", "device": "rt4k"}}
 //
-// (each input's module and what is connected to it, from the layout) on every
-// input change, whenever the layout changes, as soon as it finds the Cruller
+// (from the layout: each input's module and the console on it, and the output
+// to the RetroTINK 4K) on every input change, whenever the layout changes, as
+// soon as it finds the Cruller
 // (also when it announces itself again after a restart), and every 60 s in case
 // a report was lost. Cruller answers {"ok": true, "changed": bool}, or 409 when it is
 // already paired with another SVS Bridge.
