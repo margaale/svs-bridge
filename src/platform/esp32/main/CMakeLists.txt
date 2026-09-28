@@ -12,6 +12,7 @@ idf_component_register(SRCS "main.cpp"
                             "svs_flasher.cpp"
                             "svs_fw_repo.cpp"
                             "bridge_fw_repo.cpp"
+                            "cruller.cpp"
                        INCLUDE_DIRS "." ${CORE}
                        PRIV_REQUIRES app_update
                                      bootloader_support

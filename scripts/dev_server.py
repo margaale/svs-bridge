@@ -53,6 +53,16 @@ MOCK_BOOTLOADER = "vector"
 auth = {"password": "password", "sessions": set(),
         "api_token": "0123456789abcdef" * 4}  # 64 hex chars, like the firmware
 
+# Crullers announcing _rt4k._tcp. "Game room" is paired with another bridge, so
+# picking it shows the 409.
+CRULLERS = [
+    {"id": "e6614c311b2a5f2e", "name": "Living", "instance": "Cruller Living",
+     "host": "cruller-living.local", "ip": "192.168.1.61", "port": 80, "version": "0.9.0"},
+    {"id": "e6614c311b7c4d21", "name": "Game room", "instance": "Cruller Game room",
+     "host": "cruller-game-room.local", "ip": "192.168.1.62", "port": 80, "version": "0.9.0"},
+]
+cruller = {"selected": None, "last": None, "count": 0}
+
 START = time.monotonic()
 svs_log = []  # {"seq", "t", "d", "s"}
 
@@ -220,6 +230,23 @@ class Handler(BaseHTTPRequestHandler):
     def svs_json(self):
         return {**state["svs"], "update": update}
 
+    def cruller_json(self):
+        sel = cruller["selected"]
+        if sel and any(c["id"] == sel for c in CRULLERS):
+            game_room = sel == CRULLERS[1]["id"]
+            cruller["count"] += 0 if game_room else 1
+            cruller["last"] = {"at": time.monotonic(), "ok": not game_room,
+                               "http_status": 409 if game_room else 200,
+                               "error": "paired with another SVS Bridge" if game_room else "",
+                               "paired_with": "svs-bridge-112233445566" if game_room else "",
+                               "input": state["svs"]["current_input"], "count": cruller["count"]}
+        last = cruller["last"]
+        if last:
+            last = {**{k: v for k, v in last.items() if k != "at"},
+                    "ago_s": int(time.monotonic() - last["at"])}
+        return {"selected": sel, "last": last,
+                "found": [{**c, "selected": c["id"] == sel} for c in CRULLERS]}
+
     def do_GET(self):
         path = self.path.partition("?")[0]
         if path in PAGES:
@@ -267,6 +294,8 @@ class Handler(BaseHTTPRequestHandler):
                            "application/x-pem-file")
         elif path == "/device/svs":
             self.send_json(self.svs_json())
+        elif path == "/device/cruller":
+            self.send_json(self.cruller_json())
         elif path == "/device/svs/log":
             query = self.path.partition("?")[2]
             after = int(dict(p.split("=", 1) for p in query.split("&") if "=" in p).get("after", 0))
@@ -337,6 +366,12 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/device/api-token/regenerate":
             auth["api_token"] = secrets.token_hex(32)
             self.send_json({"token": auth["api_token"]})
+        elif path == "/device/cruller/scan":
+            time.sleep(2)
+            self.send_json(self.cruller_json())
+        elif path == "/device/cruller/select":
+            cruller.update(selected=json.loads(body or b"{}").get("id") or None, last=None, count=0)
+            self.send_json(self.cruller_json())
         elif path == "/device/svs/mode":
             state["svs"]["send_enabled"] = bool(json.loads(body or b"{}").get("send"))
             self.send_json(self.svs_json())

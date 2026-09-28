@@ -112,6 +112,33 @@ automatically.
 The matching custom integration (HACS) is in a separate repository:
 [margaale/svs-bridge-hacs](https://github.com/margaale/svs-bridge-hacs).
 
+## Cruller
+
+[Cruller](https://github.com/margaale/Cruller) bridges a RetroTINK 4K to the
+network, and its gameID applies the game profile of the console on screen. The
+RT4K cannot tell it when the switch changes input, so the bridge does.
+
+Crullers announce themselves over mDNS as `_rt4k._tcp` (TXT `id`, `ver`, `api`,
+and `name` once named). The web UI's **Cruller** tab lists the ones on the
+network; pick the one on the RetroTINK this switch feeds. The bridge stores its
+`id` (not its address, which it looks up again) and sends it, over plain HTTP:
+
+```
+POST http://<host>:<port>/api/svs
+Content-Type: application/json
+
+{"id": "svs-bridge-aabbccddeeff", "current_input": 3, "total_inputs": 8, "live": true}
+```
+
+on every input change, as soon as it finds the Cruller (also when it announces
+itself again after a restart), and every 60 s in case a report was lost (every
+10 s while it cannot reach it). Nothing is sent until the SVS has reported its
+input.
+
+A Cruller keeps the first bridge that reports to it and answers others with
+`409`; the tab then says it is paired with another bridge. Press **Unpair** in
+that Cruller's own Cruller tab to move it to this one.
+
 ## Source layout
 
 The same layout as [Cruller](https://github.com/margaale/Cruller):

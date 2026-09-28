@@ -20,6 +20,7 @@
 
 #include "auth.h"
 #include "bridge_fw_repo.h"
+#include "cruller.h"
 #include "factory_reset.h"
 #include "svs_flasher.h"
 #include "svs_fw_repo.h"
@@ -931,6 +932,80 @@ static esp_err_t svs_flash_post(httpd_req_t *req)
 }
 
 // ---------------------------------------------------------------------------
+// Cruller (the RT4K bridge the active input is reported to)
+// ---------------------------------------------------------------------------
+
+// {"selected": "<id>" | null,
+//  "found": [{"id", "name", "instance", "host", "ip", "port", "version", "selected"}],
+//  "last": {"ok", "http_status", "error", "paired_with", "input", "ago_s", "count"} | null}
+static esp_err_t send_cruller_state(httpd_req_t *req)
+{
+    cruller::State st = cruller::state();
+    int64_t now_ms = esp_timer_get_time() / 1000;
+    JsonDocument doc;
+    if (st.selected_id.empty()) {
+        doc["selected"] = nullptr;
+    } else {
+        doc["selected"] = st.selected_id;
+    }
+    JsonArray found = doc["found"].to<JsonArray>();
+    for (const auto &f : st.found) {
+        JsonObject o = found.add<JsonObject>();
+        o["id"] = f.id;
+        o["name"] = f.name;
+        o["instance"] = f.instance;
+        o["host"] = f.host.empty() ? "" : f.host + ".local";
+        o["ip"] = f.ip;
+        o["port"] = f.port;
+        o["version"] = f.version;
+        o["selected"] = f.id == st.selected_id;
+    }
+    if (!st.last.attempted) {
+        doc["last"] = nullptr;
+    } else {
+        JsonObject last = doc["last"].to<JsonObject>();
+        last["ok"] = st.last.ok;
+        last["http_status"] = st.last.http_status;
+        last["error"] = st.last.error;
+        last["paired_with"] = st.last.paired_with;
+        last["input"] = st.last.input;
+        last["ago_s"] = (now_ms - st.last.at_ms) / 1000;
+        last["count"] = st.last.count;
+    }
+    return send_json(req, doc);
+}
+
+static esp_err_t cruller_get(httpd_req_t *req)
+{
+    return send_cruller_state(req);
+}
+
+// Browses the network again (about 2 s), then replies like GET /device/cruller
+static esp_err_t cruller_scan_post(httpd_req_t *req)
+{
+    cruller::scan();
+    return send_cruller_state(req);
+}
+
+// Body: {"id": "<Cruller id>"}; "" stops reporting
+static esp_err_t cruller_select_post(httpd_req_t *req)
+{
+    JsonDocument body;
+    if (!read_json_body(req, body)) {
+        return ESP_OK;
+    }
+    std::string id = body["id"] | "";
+    esp_err_t err = cruller::select(id);
+    if (err == ESP_ERR_INVALID_ARG) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, "Invalid Cruller id");
+    }
+    if (err != ESP_OK) {
+        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
+    }
+    return send_cruller_state(req);
+}
+
+// ---------------------------------------------------------------------------
 // Authentication
 // ---------------------------------------------------------------------------
 
@@ -1139,6 +1214,9 @@ static const RouteEntry HTTPS_ROUTES[] = {
     {"/device/svs/firmware", HTTP_POST, {svs_firmware_upload_post, Access::Admin, false}},
     {"/device/svs/firmware/official", HTTP_POST, {svs_firmware_official_post, Access::Admin, false}},
     {"/device/svs/firmware/flash", HTTP_POST, {svs_flash_post, Access::Admin, false}},
+    {"/device/cruller", HTTP_GET, {cruller_get, Access::Admin, false}},
+    {"/device/cruller/scan", HTTP_POST, {cruller_scan_post, Access::Admin, false}},
+    {"/device/cruller/select", HTTP_POST, {cruller_select_post, Access::Admin, false}},
 };
 
 // Plain HTTP: the setup portal (admin password, then WiFi), only while the
