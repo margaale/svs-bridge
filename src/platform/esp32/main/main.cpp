@@ -29,6 +29,7 @@
 #include "auth.h"
 #include "cruller.h"
 #include "factory_reset.h"
+#include "rfc2217.h"
 #include "svs_flasher.h"
 #include "svs_settings.h"
 #include "svs_usb.h"

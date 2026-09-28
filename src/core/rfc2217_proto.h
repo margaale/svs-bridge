@@ -1,16 +1,20 @@
 // RFC 2217 (Telnet COM Port Control) server side, without sockets: splits what a client sends into
-// serial data and Telnet commands, and builds the replies. rfc2217.c runs it on TCP port 2217; the
-// host unit tests (tests/test_rfc2217.c) drive it directly.
+// serial data and Telnet commands, and builds the replies. rfc2217.cpp runs it on TCP port 2217; the
+// host unit tests (tests/test_rfc2217.cpp) drive it directly.
 //
 // Settings the client asks for (baud rate, data bits, parity, stop bits, control lines) are
 // acknowledged with the value asked for, as clients such as pyserial expect, but change nothing: the
-// RT4K's line stays at 2 Mbaud 8N1.
+// SVS's line stays at 9600 8N1.
 
 #pragma once
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define RFC2217_SB_MAX 64
 
@@ -27,7 +31,7 @@ typedef struct {
 } rfc2217_t;
 
 typedef struct {
-    uint8_t *data;       // serial data for the RT4K
+    uint8_t *data;       // serial data for the SVS
     size_t data_len, data_max;
     uint8_t *reply;      // bytes to send back to the client
     size_t reply_len, reply_max;
@@ -49,3 +53,7 @@ size_t rfc2217_modemstate(uint8_t modem_state, uint8_t *out, size_t max);
 // Serial data for the client, with 0xFF doubled. Returns bytes written to out; *used says how much of
 // `in` fit.
 size_t rfc2217_escape(const uint8_t *in, size_t len, uint8_t *out, size_t max, size_t *used);
+
+#ifdef __cplusplus
+}
+#endif

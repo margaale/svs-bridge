@@ -2,6 +2,9 @@ build/
 build-tests/
 .ccache/
 src/platform/esp32/managed_components/
+/managed_components/
+sdkconfig
+sdkconfig.old
 
 # Local-only tooling and editor config (machine-specific paths)
 .vscode/

@@ -3,8 +3,8 @@ set(CORE ${SVS_BRIDGE_ROOT}/src/core)
 
 idf_component_register(
     SRCS 
-        ${CORE}/rfc2217.c
         ${CORE}/rfc2217_proto.c
+        "rfc2217.cpp"
         "main.cpp"
         "svs_usb.cpp"
         "wifi_manager.cpp"
