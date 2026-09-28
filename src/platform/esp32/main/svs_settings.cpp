@@ -28,8 +28,9 @@ static const uint32_t ANSWER_TIMEOUT_MS = 800;
 static const int ATTEMPTS = 2;
 static const uint32_t WRITE_GAP_MS = 60;         // the utility waits 50 ms after each W
 static const uint32_t INPUT_CHANGE_TIMEOUT_MS = 3000;
-static const size_t MAX_LAYOUT = 3000;
+static const size_t MAX_LAYOUT = 3900;  // NVS strings take up to 4000 bytes
 static const size_t MAX_NAME = 32;
+static const size_t MAX_DEVICE = 16;
 static const size_t MAX_OUTPUTS = 6;
 
 static SemaphoreHandle_t s_mutex;
@@ -61,9 +62,13 @@ static uint32_t s_seq = 0;
 // What the background write is to write (set before its task starts)
 static std::vector<InputSettings> s_want;
 
-// The layout, guarded by s_mutex
+// The layout, guarded by s_mutex. Each input's name and the id of the
+// console or device picked for it (from the web UI's list; "" if typed)
+struct Label {
+    std::string name, device;
+};
 static std::string s_layout = "{}";
-static std::vector<std::string> s_names;
+static std::vector<Label> s_labels;
 
 static int64_t now_ms() { return esp_timer_get_time() / 1000; }
 
@@ -492,7 +497,21 @@ static bool valid_kind(const std::string &kind, bool output)
 }
 
 // Normalizes a layout: known keys only. false with *error if it is not valid.
-static bool normalize(const std::string &json, std::string &out, std::vector<std::string> &names,
+// A device id from the web UI's list: lower-case letters, digits, '-' and '_'
+static bool valid_device(const std::string &id)
+{
+    if (id.size() > MAX_DEVICE) {
+        return false;
+    }
+    for (char c : id) {
+        if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_')) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool normalize(const std::string &json, std::string &out, std::vector<Label> &labels,
                       std::string *error)
 {
     JsonDocument in;
@@ -502,7 +521,7 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
         return false;
     }
     JsonDocument doc;
-    names.clear();
+    labels.clear();
     for (const char *list : {"inputs", "outputs"}) {
         bool output = strcmp(list, "outputs") == 0;
         JsonArrayConst src = in[list].as<JsonArrayConst>();
@@ -516,6 +535,11 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
         for (JsonObjectConst e : src) {
             std::string kind = e["kind"] | "";
             std::string name = e["name"] | "";
+            std::string device = e["device"] | "";
+            if (!valid_device(device)) {
+                *error = "Unknown device: " + device;
+                return false;
+            }
             if (!valid_kind(kind, output)) {
                 *error = "Unknown module: " + kind;
                 return false;
@@ -532,6 +556,7 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
                 }
                 seen = true;
                 name.clear();
+                device.clear();
             } else if (output && ++outputs > MAX_OUTPUTS) {
                 *error = "At most 6 outputs";
                 return false;
@@ -539,8 +564,11 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
             JsonObject o = dst.add<JsonObject>();
             o["kind"] = kind;
             o["name"] = name;
+            if (!device.empty()) {
+                o["device"] = device;
+            }
             if (!output) {
-                names.push_back(name);
+                labels.push_back({name, device});
             }
         }
     }
@@ -560,10 +588,10 @@ static void load_layout()
         if (nvs_get_str(h, KEY_LAYOUT, &json[0], &len) == ESP_OK) {
             json.resize(len - 1);
             std::string out, error;
-            std::vector<std::string> names;
-            if (normalize(json, out, names, &error)) {
+            std::vector<Label> labels;
+            if (normalize(json, out, labels, &error)) {
                 s_layout = out;
-                s_names = names;
+                s_labels = labels;
             }
         }
     }
@@ -581,8 +609,8 @@ std::string layout_json()
 esp_err_t set_layout_json(const std::string &json, std::string *error)
 {
     std::string out;
-    std::vector<std::string> names;
-    if (!normalize(json, out, names, error)) {
+    std::vector<Label> labels;
+    if (!normalize(json, out, labels, error)) {
         return ESP_ERR_INVALID_ARG;
     }
     nvs_handle_t h;
@@ -600,7 +628,7 @@ esp_err_t set_layout_json(const std::string &json, std::string *error)
     }
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_layout = out;
-    s_names = names;
+    s_labels = labels;
     xSemaphoreGive(s_mutex);
     return ESP_OK;
 }
@@ -608,9 +636,17 @@ esp_err_t set_layout_json(const std::string &json, std::string *error)
 std::string input_name(int input)
 {
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    std::string name = input >= 1 && input <= (int)s_names.size() ? s_names[input - 1] : "";
+    std::string name = input >= 1 && input <= (int)s_labels.size() ? s_labels[input - 1].name : "";
     xSemaphoreGive(s_mutex);
     return name;
+}
+
+std::string input_device(int input)
+{
+    xSemaphoreTake(s_mutex, portMAX_DELAY);
+    std::string device = input >= 1 && input <= (int)s_labels.size() ? s_labels[input - 1].device : "";
+    xSemaphoreGive(s_mutex);
+    return device;
 }
 
 }  // namespace svs_settings

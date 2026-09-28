@@ -233,6 +233,8 @@ static void add_svs_info(JsonObject svs)
     svs["send_enabled"] = svs_usb::send_allowed();
     // The name given to the active input in the web UI ("" if none)
     svs["current_input_name"] = info.current_input > 0 ? svs_settings::input_name(info.current_input) : "";
+    // The console picked for it in the web UI (an id such as "snes"; "" if none)
+    svs["current_input_device"] = info.current_input > 0 ? svs_settings::input_device(info.current_input) : "";
 }
 
 // Why the bridge last started, so unexpected restarts show up remotely

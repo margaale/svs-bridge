@@ -290,7 +290,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def svs_json(self):
         n = state["svs"]["current_input"]
-        state["svs"]["current_input_name"] = layout["inputs"][n - 1]["name"] if 0 < n <= len(layout["inputs"]) else ""
+        entry = layout["inputs"][n - 1] if 0 < n <= len(layout["inputs"]) else {}
+        state["svs"]["current_input_name"] = entry.get("name", "")
+        state["svs"]["current_input_device"] = entry.get("device", "")
         return {**state["svs"], "update": update}
 
     def cruller_json(self):

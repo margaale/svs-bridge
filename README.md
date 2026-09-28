@@ -50,11 +50,14 @@ Utility for day-to-day settings:
 - **What each module is.** The SVS only counts its inputs and recognises V3
   SCART/VGA modules and transcoders; pick the other modules (SCART, Component,
   VGA, S-Video/composite, D-Terminal) and add the outputs (SCART, Component,
-  VGA, S-Video/composite, BNC, up to 6), and name them. Drag a module to move
-  it, inputs among inputs and outputs among outputs (Alt+←/→ with the
+  VGA, S-Video/composite, BNC, up to 6), and pick the console or device on
+  each (or type a name): the list puts first the consoles that fit the module
+  and warns when one does not send what the module takes. Drag a module to
+  move it, inputs among inputs and outputs among outputs (Alt+←/→ with the
   keyboard). Transcoders move among the outputs too: one converts only the
-  outputs past it, further from the control module. This is kept on the bridge; the name of the active input also
-  goes to Home Assistant (`current_input_name`).
+  outputs past it, further from the control module. This is kept on the
+  bridge; the active input's name and console also go to Home Assistant
+  (`current_input_name`, `current_input_device`).
 - **Settings stored in the SVS**, per input: RGB → YPbPr and YPbPr → RGB
   transcoding, sync on green and sync bypass (V3 modules), auto profile, and
   the IR codes the SVS sends the scaler (with the official utility's presets
@@ -133,7 +136,8 @@ No cloud, no MQTT — Home Assistant polls the bridge over the LAN.
 
 - `GET /api/v1/info` — device identity (id, name, model, firmware) for setup.
 - `GET /api/v1/state` — live SVS state (connected, current/total inputs, the
-  active input's name, firmware) and bridge diagnostics (WiFi RSSI, uptime).
+  active input's name and console id, firmware) and bridge diagnostics (WiFi
+  RSSI, uptime).
 
 Both need an `Authorization: Bearer <token>` header. The token is shown in the
 web UI's **Home Assistant** tab (copy or regenerate it there). The bridge also

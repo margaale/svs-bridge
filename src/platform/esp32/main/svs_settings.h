@@ -9,11 +9,12 @@
 //
 // The layout is what the SVS cannot report: which kind of module each input
 // is (only V3 modules identify themselves; "" until it is picked), the
-// outputs, and names. The outputs run from the control module outwards and
+// outputs, names, and the console or device on each ("device": an id from the
+// web UI's list, omitted when the name is typed). The outputs run from the control module outwards and
 // hold the transcoders too ("tx_rgb_to_ypbpr", "tx_ypbpr_to_rgb"), where they
 // sit: a transcoder converts only the outputs past it. It is kept in the
 // bridge's NVS as JSON:
-//   {"inputs": [{"kind": "scart", "name": "Super Nintendo"}, ...],
+//   {"inputs": [{"kind": "scart", "name": "Super Nintendo", "device": "snes"}, ...],
 //    "outputs": [{"kind": "tx_rgb_to_ypbpr", "name": ""},
 //                {"kind": "component", "name": "RetroTINK 4K"}, ...]}
 #pragma once
@@ -75,5 +76,8 @@ esp_err_t set_layout_json(const std::string &json, std::string *error);
 
 // The name given to an input (1-based), "" if none
 std::string input_name(int input);
+
+// The id of the console picked for an input (1-based, e.g. "snes"), "" if none
+std::string input_device(int input);
 
 }  // namespace svs_settings
