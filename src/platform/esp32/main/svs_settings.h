@@ -10,10 +10,10 @@
 // The layout is what the SVS cannot report: which kind of module each input
 // is (only V3 modules identify themselves; "" until it is picked), the
 // outputs, names, and the console or device on each ("device": an id from the
-// web UI's list, omitted when the name is typed). The outputs run from the control module outwards and
-// hold the transcoders too ("tx_rgb_to_ypbpr", "tx_ypbpr_to_rgb"), where they
-// sit: a transcoder converts only the outputs past it. It is kept in the
-// bridge's NVS as JSON:
+// web UI's list, omitted when the name is typed). The outputs run from the
+// control module outwards and hold the transcoders too ("tx_rgb_to_ypbpr",
+// "tx_ypbpr_to_rgb"), where they sit: a transcoder converts only the outputs
+// past it. It is kept in the bridge's NVS as JSON:
 //   {"inputs": [{"kind": "scart", "name": "Super Nintendo", "device": "snes"}, ...],
 //    "outputs": [{"kind": "tx_rgb_to_ypbpr", "name": ""},
 //                {"kind": "component", "name": "RetroTINK 4K"}, ...]}
