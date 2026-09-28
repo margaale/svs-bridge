@@ -126,7 +126,6 @@ static void flush_line(client_t *c) {
     const esp_err_t err = svs_usb::send(cmd);
     const char *why = err == ESP_OK                  ? nullptr
                       : err == ESP_ERR_INVALID_STATE ? "SVS not connected"
-                      : err == ESP_ERR_NOT_SUPPORTED ? "listen-only mode"
                       : err == ESP_ERR_NOT_ALLOWED   ? "SVS firmware update in progress"
                                                      : "send error";
     if (why) note(c, std::string("not sent to the SVS (") + why + "): " + cmd);

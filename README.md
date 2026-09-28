@@ -39,7 +39,10 @@ confirmed by the SVS author:
   commands or flash, then reconnect it.
 
 For the intended use — watch the active input and act on the RetroTINK — the
-bridge only listens to the SVS, so the HD-15 can stay connected.
+bridge only needs to listen, so the HD-15 can stay connected. The bridge can
+always send (the console, settings, firmware updates, RFC 2217 clients); what
+it sends only gets through with the HD-15 unplugged. Restarting the SVS (a DTR
+pulse, **SVS** → **Control** → **Restart SVS**) works either way.
 
 ## Your switch and the SVS's settings
 
@@ -65,8 +68,7 @@ Utility for day-to-day settings:
   **Save to the SVS**. Moving an input takes its settings along, to be saved.
 
 Reading and saving send commands, so the RetroTINK's HD-15 must be unplugged
-(see above): the page asks first, turns sending on for the operation and back
-to listen-only afterwards. It needs SVS firmware 1.20 or newer.
+(see above): the page asks first. It needs SVS firmware 1.20 or newer.
 
 These use commands the SVS's serial documentation does not list, taken from
 the official utility: `R<addr>` reads a byte of the control module's EEPROM,

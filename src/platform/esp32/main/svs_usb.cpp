@@ -63,7 +63,6 @@ static StreamBufferHandle_t s_raw_stream;  // raw mode: to raw_read()
 static CdcAcmDevice *s_dev = nullptr;      // guarded by s_dev_mutex
 static volatile bool s_raw = false;
 static Info s_info = {"", -1, -1, false, false, 0, 0};  // guarded by s_dev_mutex
-static volatile bool s_send_allowed = false;  // listen-only until enabled
 // Set at boot from the reset reason: restart the SVS on the first connection
 // after a cold boot or a deliberate reboot, but not after a crash/watchdog.
 static bool s_restart_on_boot = false;
@@ -374,8 +373,8 @@ static void device_task(void *arg)
         // first connection to read its fresh version and inputs -- but not after
         // a crash or watchdog reset, so a boot loop never keeps resetting it.
         // Unless the SVS is booting right now and prints its banner by itself.
-        // This is a DTR reset pulse, not a serial command, so it is allowed even
-        // in listen-only mode (the RetroTINK holds the RX line, not DTR).
+        // This is a DTR reset pulse, not a serial command, so it works even with
+        // the RetroTINK's HD-15 connected (the RetroTINK holds the RX line, not DTR).
         if (s_restart_on_boot) {
             s_restart_on_boot = false;  // one-shot: only the first connect after boot
             // The SVS may be booting right now; wait briefly for its own banner.
@@ -436,12 +435,6 @@ void start()
     s_answers = xQueueCreate(8, sizeof(Answer));
     s_query_mutex = xSemaphoreCreateMutex();
 
-    // Always start in listen-only. Send mode (commands and firmware flashing) is
-    // not persisted: it must be re-enabled after each boot, so the bridge never
-    // comes up able to send to the SVS on its own (safer with the RetroTINK's
-    // HD-15 connected).
-    s_send_allowed = false;
-    ESP_LOGI(TAG, "SVS mode: listen only (default)");
 
     // A one-time SVS reset on the first connection is still allowed after a cold
     // boot or a deliberate reboot -- a DTR reset pulse, not a command -- so its
@@ -487,18 +480,9 @@ Info info()
     return copy;
 }
 
-bool send_allowed() { return s_send_allowed; }
-
-void set_send_allowed(bool allowed)
-{
-    // RAM only: the mode resets to listen-only on the next boot (see start()).
-    s_send_allowed = allowed;
-    ESP_LOGI(TAG, "SVS mode: %s", allowed ? "send allowed" : "listen only");
-}
-
-// The DTR reset pulse itself, without the send-mode gate. A reset is a hardware
-// pulse on the DTR line, not a serial command, so it is safe even in listen-only
-// mode (and works with the RetroTINK connected, which only holds the RX line).
+// The DTR reset pulse itself. A reset is a hardware pulse on the DTR line, not a
+// serial command, so it works with the RetroTINK connected (which only holds the
+// RX line).
 static esp_err_t do_restart_svs()
 {
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
@@ -525,9 +509,6 @@ static esp_err_t do_restart_svs()
 
 esp_err_t restart_svs()
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     return do_restart_svs();
 }
 
@@ -554,9 +535,6 @@ static esp_err_t do_send(const std::string &cmd, bool log)
 
 esp_err_t send(const std::string &cmd)
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     return do_send(cmd);
 }
 
@@ -577,9 +555,6 @@ void session_end()
 
 esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms)
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     if (!s_session) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -600,9 +575,6 @@ esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms
 
 esp_err_t send_quiet(const std::string &cmd)
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     return do_send(cmd, !s_session);
 }
 
@@ -612,9 +584,6 @@ esp_err_t send_quiet(const std::string &cmd)
 
 esp_err_t raw_begin(uint32_t baudrate)
 {
-    if (!s_send_allowed) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
     if (s_dev == nullptr || s_raw) {
         xSemaphoreGive(s_dev_mutex);
