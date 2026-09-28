@@ -8,10 +8,14 @@
 // and only the bytes that change.
 //
 // The layout is what the SVS cannot report: which kind of module each input
-// is (only V3 modules identify themselves), the outputs, and names. It is kept
-// in the bridge's NVS as JSON:
+// is (only V3 modules identify themselves; "" until it is picked), the
+// outputs, and names. The outputs run from the control module outwards and
+// hold the transcoders too ("tx_rgb_to_ypbpr", "tx_ypbpr_to_rgb"), where they
+// sit: a transcoder converts only the outputs past it. It is kept in the
+// bridge's NVS as JSON:
 //   {"inputs": [{"kind": "scart", "name": "Super Nintendo"}, ...],
-//    "outputs": [{"kind": "component", "name": "RetroTINK 4K"}, ...]}
+//    "outputs": [{"kind": "tx_rgb_to_ypbpr", "name": ""},
+//                {"kind": "component", "name": "RetroTINK 4K"}, ...]}
 #pragma once
 
 #include <stdint.h>
