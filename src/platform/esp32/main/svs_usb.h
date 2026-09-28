@@ -34,13 +34,9 @@ struct Info {
 };
 Info info();
 
-// Whether the bridge may talk back to the SVS (send commands, reset it, enter
-// its bootloader, flash it) or only listen. Listening always works; sending
-// only works with the RetroTINK's HD-15 disconnected, so this lets the user
-// keep the bridge in a safe listen-only mode during normal use. The choice
-// persists in NVS. Default: listen only.
-bool send_allowed();
-void set_send_allowed(bool allowed);
+// Sending to the SVS (commands, settings, firmware) only works with the
+// RetroTINK's HD-15 disconnected: the SVS shares that line. Listening always
+// works. The bridge always may send; the web UI warns where it matters.
 
 // Restarts the SVS by pulsing DTR, as the official utility does when it
 // connects; it then prints its banner. Video drops for a moment.

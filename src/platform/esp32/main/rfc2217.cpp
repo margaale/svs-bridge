@@ -31,7 +31,11 @@
 struct client_t {
     int fd;                        // -1: free
     char ip[16];
+    uint16_t port;
     int64_t since_ms;              // connected at (the oldest is replaced when all are taken)
+    int64_t last_rx_ms;            // last time it sent anything
+    uint32_t rx, tx;               // bytes received from / sent to it
+    uint32_t commands, refused;    // lines sent to the SVS / not sent (listen-only mode, ...)
     rfc2217_t proto;
     uint32_t seq;                  // last traffic-log entry sent to it (svs_usb::log_since)
     int modem_sent;                // modem state last announced (-1: not yet)
@@ -80,6 +84,14 @@ static void note(const client_t *c, const std::string &text) {
     svs_usb::log_note(std::string("RFC2217 ") + c->ip + ": " + text);
 }
 
+static bool send_all(int fd, const uint8_t *p, size_t len);
+
+// send_all() to a client, counted
+static bool send_to(client_t *c, const uint8_t *p, size_t len) {
+    c->tx += (uint32_t)len;
+    return send_all(c->fd, p, len);
+}
+
 static bool send_all(int fd, const uint8_t *p, size_t len) {
     while (len) {
         const int n = send(fd, p, len, 0);
@@ -98,11 +110,27 @@ static bool send_text(client_t *c, const std::string &text) {
     while (left) {
         size_t used;
         const size_t m = rfc2217_escape(p, left, out, sizeof(out), &used);
-        if (!send_all(c->fd, out, m)) return false;
+        if (!send_to(c, out, m)) return false;
         p += used;
         left -= used;
     }
     return true;
+}
+
+static int connected_count(void) {
+    int n = 0;
+    for (int i = 0; i < MAX_CLIENTS; i++) n += clients[i].fd >= 0;
+    return n;
+}
+
+// "3 min 20 s" for the log
+static std::string span(int64_t ms) {
+    const int64_t s = ms / 1000;
+    char b[32];
+    if (s < 60) snprintf(b, sizeof(b), "%d s", (int)s);
+    else if (s < 3600) snprintf(b, sizeof(b), "%d min %d s", (int)(s / 60), (int)(s % 60));
+    else snprintf(b, sizeof(b), "%d h %d min", (int)(s / 3600), (int)(s / 60 % 60));
+    return b;
 }
 
 static void drop_client(client_t *c, const char *why) {
@@ -111,7 +139,12 @@ static void drop_client(client_t *c, const char *why) {
     c->fd = -1;
     c->line_len = 0;
     printf("rfc2217: client %s %s\n", c->ip, why);
-    note(c, std::string("client ") + why);
+    char b[160];
+    snprintf(b, sizeof(b), "client :%u %s after %s: %lu bytes in, %lu out, %lu commands sent, %lu not sent (%d of %d connected)",
+             (unsigned)c->port, why, span(now_ms() - c->since_ms).c_str(), (unsigned long)c->rx,
+             (unsigned long)c->tx, (unsigned long)c->commands, (unsigned long)c->refused, connected_count(),
+             MAX_CLIENTS);
+    note(c, b);
     c->ip[0] = 0;
 }
 
@@ -124,9 +157,9 @@ static void flush_line(client_t *c) {
     if (end == start) return;
     const std::string cmd((const char *)c->line + start, end - start);
     const esp_err_t err = svs_usb::send(cmd);
+    (err == ESP_OK ? c->commands : c->refused)++;
     const char *why = err == ESP_OK                  ? nullptr
                       : err == ESP_ERR_INVALID_STATE ? "SVS not connected"
-                      : err == ESP_ERR_NOT_SUPPORTED ? "listen-only mode"
                       : err == ESP_ERR_NOT_ALLOWED   ? "SVS firmware update in progress"
                                                      : "send error";
     if (why) note(c, std::string("not sent to the SVS (") + why + "): " + cmd);
@@ -163,18 +196,24 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
     setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
     c->fd = fd;
-    c->since_ms = now_ms();
+    c->since_ms = c->last_rx_ms = now_ms();
+    c->rx = c->tx = c->commands = c->refused = 0;
     inet_ntoa_r(peer->sin_addr, c->ip, sizeof(c->ip));
+    c->port = ntohs(peer->sin_port);
     rfc2217_init(&c->proto);
     c->seq = svs_usb::log_head();  // from now on, not what came before
     c->modem_sent = -1;
     c->line_len = 0;
     const size_t n = rfc2217_greeting(&c->proto, buf, size);
-    if (!send_all(fd, buf, n)) {
+    if (!send_to(c, buf, n)) {
         drop_client(c, "failed");
     } else {
         printf("rfc2217: client %s connected\n", c->ip);
-        note(c, "client connected; sent " + hex(buf, n) + " (Telnet options)");
+        char b[160];
+        snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected; %s); sent ", (unsigned)c->port,
+                 connected_count(), MAX_CLIENTS,
+                 svs_usb::send_allowed() ? "commands go to the SVS" : "listen-only: commands are not sent to the SVS");
+        note(c, b + hex(buf, n) + " (Telnet options)");
     }
 }
 
@@ -225,6 +264,8 @@ static void rfc2217_task(void *param) {
                     drop_client(c, "left");
                     continue;
                 }
+                c->rx += (uint32_t)n;
+                c->last_rx_ms = now_ms();
                 rfc2217_io_t io = {};
                 io.data = data;
                 io.data_max = sizeof(data);
@@ -235,7 +276,7 @@ static void rfc2217_task(void *param) {
                 note(c, "received " + std::to_string(n) + " bytes: " + hex(in, (size_t)n) +
                             (io.data_len ? " (text: \"" + printable(data, io.data_len) + "\")" : "") +
                             (io.reply_len ? "; answered " + hex(reply, io.reply_len) : ""));
-                if (io.reply_len && !send_all(c->fd, reply, io.reply_len)) {
+                if (io.reply_len && !send_to(c, reply, io.reply_len)) {
                     drop_client(c, "failed");
                     continue;
                 }
@@ -248,7 +289,7 @@ static void rfc2217_task(void *param) {
             // The modem state, announced at connect and on every change.
             if (modem != c->modem_sent) {
                 const size_t n = rfc2217_modemstate(modem, out, sizeof(out));
-                if (!send_all(c->fd, out, n)) {
+                if (!send_to(c, out, n)) {
                     drop_client(c, "failed");
                     continue;
                 }
@@ -270,8 +311,25 @@ static void rfc2217_task(void *param) {
 
 int rfc2217_count(int *max) {
     if (max) *max = MAX_CLIENTS;
+    return connected_count();
+}
+
+int rfc2217_info(rfc2217_info_t *out, int max) {
+    const int64_t now = now_ms();
     int n = 0;
-    for (int i = 0; i < MAX_CLIENTS; i++) n += clients[i].fd >= 0;
+    for (int i = 0; i < MAX_CLIENTS && n < max; i++) {
+        const client_t *c = &clients[i];
+        if (c->fd < 0) continue;
+        rfc2217_info_t *o = &out[n++];
+        snprintf(o->ip, sizeof(o->ip), "%s", c->ip);
+        o->port = c->port;
+        o->connected_s = (uint32_t)((now - c->since_ms) / 1000);
+        o->idle_s = (uint32_t)((now - c->last_rx_ms) / 1000);
+        o->rx = c->rx;
+        o->tx = c->tx;
+        o->commands = c->commands;
+        o->refused = c->refused;
+    }
     return n;
 }
 

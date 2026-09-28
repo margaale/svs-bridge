@@ -17,6 +17,7 @@
 //   POST /device/login            {"password"}
 //   POST /device/logout
 //   GET  /device/scan             [admin] nearby WiFi networks (JSON)
+//   GET  /device/clients          [admin] RFC 2217 clients connected, and what each has done (JSON)
 //   GET  /device/cert             [admin] server certificate (PEM)
 //   POST /device/wifi             [admin] {"ssid", "password"}
 //   POST /device/ota              [admin] raw firmware image (build/esp32/svs_bridge.bin)
@@ -26,7 +27,6 @@
 //   POST /device/factory-reset    [admin] erase all settings, reboot into setup mode
 //   GET  /device/svs              [admin] SVS banner info and firmware update state
 //   GET  /device/svs/log?after=N  [admin] traffic with the SVS after entry N
-//   POST /device/svs/mode         [admin] {"send": bool}: listen-only vs. send to the SVS
 //   POST /device/svs/restart      [admin] restart the SVS (it then reports its info)
 //   POST /device/svs/send         [admin] {"command"}: send a line to the SVS (web UI console)
 //   POST /device/svs/check        [admin] step 1: identify the SVS bootloader (restarts it)

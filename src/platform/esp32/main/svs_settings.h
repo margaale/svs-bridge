@@ -58,8 +58,7 @@ struct Status {
 Status status();
 bool busy();
 
-// In the background. ESP_ERR_NOT_SUPPORTED in listen-only mode,
-// ESP_ERR_INVALID_STATE with *error set if it cannot start.
+// In the background. ESP_ERR_INVALID_STATE with *error set if it cannot start.
 esp_err_t start_read(std::string *error);
 
 // Writes `want` (one entry per input the SVS reported) over the last read.

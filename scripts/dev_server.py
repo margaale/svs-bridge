@@ -34,7 +34,7 @@ state = {
     "tls": {"source": "self-signed",
             "fingerprint": ":".join(f"{b:02X}" for b in bytes(range(0xA0, 0xC0)))},
     "svs": {"connected": True, "firmware": "SVS_FW_1.21", "current_input": 3, "total_inputs": 8,
-            "live": False, "inputs_live": True, "send_enabled": False, "current_input_name": ""},
+            "live": False, "inputs_live": True, "send_enabled": True, "current_input_name": ""},
 }
 
 update = {
@@ -342,6 +342,10 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/device/scan":
             time.sleep(1.5)
             self.send_json(NETWORKS)
+        elif path == "/device/clients":
+            self.send_json({"port": 2217, "max": 3, "clients": [
+                {"ip": "192.168.1.40", "port": 51544, "connected_s": uptime_ms() // 1000, "idle_s": 12,
+                 "rx": 214, "tx": 3480, "commands": 2, "refused": 1}]})
         elif path == "/device/api-token":
             self.send_json({"token": auth["api_token"]})
         elif path == "/device/releases":
@@ -445,14 +449,6 @@ class Handler(BaseHTTPRequestHandler):
             new = json.loads(body or b"{}")
             layout.update(inputs=new.get("inputs", []), outputs=new.get("outputs", []))
             self.send_json(layout)
-        elif path == "/device/svs/mode":
-            state["svs"]["send_enabled"] = bool(json.loads(body or b"{}").get("send"))
-            self.send_json(self.svs_json())
-        elif not state["svs"]["send_enabled"] and path in (
-                "/device/svs/send", "/device/svs/restart", "/device/svs/check",
-                "/device/svs/preview", "/device/svs/probe", "/device/svs/firmware/flash",
-                "/device/svs/config/read", "/device/svs/config/write"):
-            self.send_json({"error": "The bridge is in listen-only mode."}, 403)
         elif path == "/device/svs/restart":
             log("*", "SVS restarted")
             for line in (state["svs"]["firmware"], "SVS CURRENT INPUT 1", "SVS TOTAL INPUTS 8"):

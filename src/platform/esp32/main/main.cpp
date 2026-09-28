@@ -54,8 +54,6 @@ static void console_task(void *arg)
                 esp_err_t err = svs_usb::send(cmd);
                 if (err == ESP_ERR_INVALID_STATE) {
                     printf("(SVS not connected, not sent: %s)\n", cmd.c_str());
-                } else if (err == ESP_ERR_NOT_SUPPORTED) {
-                    printf("(listen-only mode, not sent: %s)\n", cmd.c_str());
                 } else if (err == ESP_ERR_NOT_ALLOWED) {
                     printf("(SVS firmware update in progress, not sent: %s)\n", cmd.c_str());
                 } else if (err != ESP_OK) {

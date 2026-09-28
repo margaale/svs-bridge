@@ -39,7 +39,10 @@ confirmed by the SVS author:
   commands or flash, then reconnect it.
 
 For the intended use — watch the active input and act on the RetroTINK — the
-bridge only listens to the SVS, so the HD-15 can stay connected.
+bridge only needs to listen, so the HD-15 can stay connected. The bridge can
+always send (the console, settings, firmware updates, RFC 2217 clients); what
+it sends only gets through with the HD-15 unplugged. Restarting the SVS (a DTR
+pulse, **SVS** → **Control** → **Restart SVS**) works either way.
 
 ## Your switch and the SVS's settings
 
@@ -65,8 +68,7 @@ Utility for day-to-day settings:
   **Save to the SVS**. Moving an input takes its settings along, to be saved.
 
 Reading and saving send commands, so the RetroTINK's HD-15 must be unplugged
-(see above): the page asks first, turns sending on for the operation and back
-to listen-only afterwards. It needs SVS firmware 1.20 or newer.
+(see above): the page asks first. It needs SVS firmware 1.20 or newer.
 
 These use commands the SVS's serial documentation does not list, taken from
 the official utility: `R<addr>` reads a byte of the control module's EEPROM,
@@ -127,6 +129,19 @@ crashes or never connects, the bridge goes back to the previous firmware, so a
 bad update cannot leave a remote bridge unreachable. After restarting, the web
 UI tells whether the new version is running or was rolled back.
 
+
+## Serial console over the network (RFC 2217)
+
+The SVS's serial console is also on TCP port 2217 as an RFC 2217 server, for
+tools such as pyserial (`rfc2217://svs-bridge.local:2217`). Up to 3 clients
+share it: each sees what the SVS says, and the lines it sends go to the SVS
+like commands from the web UI, so in listen-only mode they are not sent.
+
+**Bridge** → **Serial console clients** lists who is connected: address,
+how long, when it last sent something, bytes both ways, and how many lines it
+sent to the SVS and how many were not sent. Every connection, what it sends
+(as hex and text) and why a line was not passed on also go to the SVS tab's
+serial log.
 
 ## Home Assistant
 

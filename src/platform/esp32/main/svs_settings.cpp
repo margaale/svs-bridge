@@ -488,9 +488,6 @@ Status status()
 
 esp_err_t start_read(std::string *error)
 {
-    if (!svs_usb::send_allowed()) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     std::string blocker = read_blocker();
     if (!blocker.empty() || !claim(Task::Reading)) {
         *error = blocker.empty() ? "The SVS's settings are being read or saved" : blocker;
@@ -501,9 +498,6 @@ esp_err_t start_read(std::string *error)
 
 esp_err_t start_write(const std::vector<InputSettings> &want_in, std::string *error)
 {
-    if (!svs_usb::send_allowed()) {
-        return ESP_ERR_NOT_SUPPORTED;
-    }
     std::string blocker = read_blocker();
     if (!blocker.empty()) {
         *error = blocker;
