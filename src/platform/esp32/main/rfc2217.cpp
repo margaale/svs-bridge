@@ -18,6 +18,7 @@
 #define RFC2217_TASK_PRIORITY 4
 #define MAX_CLIENTS           3
 #define TICK_MS               20
+#define TRACE_MS              60000 // how long after connecting what the SVS says is also noted in the log
 #define CLIENT_LINE_MAX       128
 #define KEEPALIVE_IDLE_S      30  // TCP keepalive (see add_client)
 #define KEEPALIVE_INTERVAL_S  5
@@ -199,6 +200,7 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
         // (the official utility does, to read the banner) would otherwise wait for a restart.
         const std::string banner = svs_usb::banner();
         c->rx_pos = svs_usb::rx_head();
+        if (!banner.empty()) note(c, "to the client: " + describe((const uint8_t *)banner.data(), banner.size()));
         if (!banner.empty() && !send_text(c, banner)) drop_client(c, "failed");
     }
 }
@@ -283,6 +285,9 @@ static void rfc2217_task(void *param) {
             // What the SVS says, byte for byte.
             uint8_t raw[128];
             for (size_t n; (n = svs_usb::rx_since(c->rx_pos, raw, sizeof(raw))) > 0;) {
+                // The first minute of a connection shows what the client is given: tools that count
+                // lines (the official utility) read the wrong one if it differs from a real cable.
+                if (now_ms() - c->since_ms < TRACE_MS) note(c, "to the client: " + describe(raw, n));
                 if (!send_text(c, std::string((const char *)raw, n))) {
                     drop_client(c, "failed");
                     break;
