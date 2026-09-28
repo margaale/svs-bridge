@@ -1,45 +1,156 @@
-name: Build
+# Builds the bridge and runs the host tests; the images are kept as artifacts, one file each (not
+# zipped). GitVersion (GitVersion.yml) gives the version. A push to master is a release (vX.Y.Z), a
+# push to develop a pre-release (vX.Y.Z-alpha.N), both with the images; pull requests only build.
+# Same scheme as Cruller (margaale/Cruller .github/workflows/build.yml).
+name: build
 
-# Compile gate for pull requests. Pushes to develop/master build and publish in
-# release.yml instead, so this does not double-build them.
 on:
+  push:
+    branches: [master, develop] # pull requests build through pull_request (one run per push, not two)
   pull_request:
   workflow_dispatch:
 
+env:
+  ESP_IDF_VERSION: "v6.1"
+  GITVERSION_VERSION: "6.x"
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      # master: X.Y.Z, a release; develop: X.Y.Z-alpha.N; pull requests: X.Y.Z-pr.N, where N is this
+      # run's number (GitVersion.yml gives X.Y.Z and the label). The run number grows with every run
+      # of this workflow, so the newest build is the newest version whatever its branch: squash
+      # merges leave no commit count to compare.
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0  # GitVersion needs the full history
-
-      - name: Install GitVersion
-        uses: gittools/actions/gitversion/setup@v3
+          fetch-depth: 0 # GitVersion reads the tags and the history
+      - uses: gittools/actions/gitversion/setup@v4
         with:
-          versionSpec: '6.x'
-      - name: Determine version
-        id: gitversion
-        uses: gittools/actions/gitversion/execute@v3
+          versionSpec: ${{ env.GITVERSION_VERSION }}
+      - id: gitversion
+        uses: gittools/actions/gitversion/execute@v4
+      - id: version
+        env:
+          CORE: ${{ steps.gitversion.outputs.majorMinorPatch }}
+          LABEL: ${{ steps.gitversion.outputs.preReleaseLabel }}
+          RELEASE: ${{ github.ref == 'refs/heads/master' }}
+        run: |
+          if [ "$RELEASE" = true ] || [ -z "$LABEL" ]; then v="$CORE"; else v="$CORE-$LABEL.$GITHUB_RUN_NUMBER"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "SVS Bridge $v (build $GITHUB_RUN_NUMBER)"
+
+  # The pure logic (reset-vector patch, Intel HEX decoder, SVS line parsing), on the host.
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and run
+        run: |
+          set -e
+          for t in svs_vectors svs_hex svs_protocol; do
+            echo "== $t =="
+            g++ -std=c++17 -Wall -Wextra -Werror -Imain -o "test_$t" "test/host/test_$t.cpp"
+            "./test_$t"
+          done
+
+  # ESP32-S3 (N16R8): ESP-IDF in Espressif's container.
+  esp32:
+    needs: version
+    runs-on: ubuntu-24.04
+    env:
+      BOARD: esp32s3_n16r8
+    steps:
+      - uses: actions/checkout@v7
 
       # ESP-IDF reads version.txt for the app version; written here, never committed.
-      - name: Set firmware version
-        run: echo "${{ steps.gitversion.outputs.semVer }}" > version.txt
+      - run: echo "${{ needs.version.outputs.version }}" > version.txt
 
-      - name: Build firmware
+      # ESP-IDF compiles through ccache: keep its directory between runs (inside the workspace, which
+      # the container mounts), so only what changed is compiled again.
+      - name: ccache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-esp32s3-${{ env.ESP_IDF_VERSION }}-${{ github.sha }}
+          restore-keys: ccache-esp32s3-${{ env.ESP_IDF_VERSION }}-
+
+      # A new board over USB: bootloader, partition table, OTA data and app in one file, at 0x0.
+      - name: Build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v6.1
+          esp_idf_version: ${{ env.ESP_IDF_VERSION }}
           target: esp32s3
-          path: '.'
+          extra_docker_args: >-
+            -e CCACHE_DIR=/app/${{ github.repository }}/.ccache -e IDF_CCACHE_ENABLE=1
+          command: idf.py build && idf.py merge-bin -o "$PWD/build/svs_bridge-factory.bin" && ccache -s
 
-      - name: Upload firmware binaries
-        uses: actions/upload-artifact@v7
+      # Named as released: svs-bridge-<version>-<board>-<file>.
+      - name: Name the images
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir dist
+          for f in build/svs_bridge.bin build/svs_bridge-factory.bin build/bootloader/bootloader.bin \
+                   build/partition_table/partition-table.bin build/ota_data_initial.bin; do
+            cp "$f" "dist/svs-bridge-${VERSION}-${BOARD}-$(basename "$f")"
+          done
+          ls -l dist
+
+      - uses: actions/upload-artifact@v7
         with:
-          name: svs-bridge-firmware
-          path: |
-            build/svs_bridge.bin
-            build/bootloader/bootloader.bin
-            build/partition_table/partition-table.bin
-            build/ota_data_initial.bin
+          path: dist/svs-bridge-${{ needs.version.outputs.version }}-${{ env.BOARD }}-svs_bridge.bin
+          archive: false # the image itself, not a zip: the artifact takes the file's name
           if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/svs-bridge-${{ needs.version.outputs.version }}-${{ env.BOARD }}-svs_bridge-factory.bin
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/svs-bridge-${{ needs.version.outputs.version }}-${{ env.BOARD }}-bootloader.bin
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/svs-bridge-${{ needs.version.outputs.version }}-${{ env.BOARD }}-partition-table.bin
+          archive: false
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/svs-bridge-${{ needs.version.outputs.version }}-${{ env.BOARD }}-ota_data_initial.bin
+          archive: false
+          if-no-files-found: error
+
+  # Every push to master: tag vX.Y.Z and a GitHub release with the images. Every push to develop: a
+  # pre-release vX.Y.Z-alpha.N, to try on a board (the Bridge tab suggests alphas only to a board
+  # already running one).
+  publish:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    needs: [version, tests, esp32]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: svs-bridge-*
+          path: release
+          merge-multiple: true # every image in one place, already named
+      # Bridges on 0.1.x look for an asset named exactly svs_bridge.bin to update from GitHub: keep
+      # one on each release so they can reach this version.
+      - run: |
+          cp release/svs-bridge-*-svs_bridge.bin release/svs_bridge.bin
+          ls -l release
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: SVS Bridge ${{ needs.version.outputs.version }}
+          generate_release_notes: true
+          prerelease: ${{ github.ref == 'refs/heads/develop' }}
+          files: release/*
+          fail_on_unmatched_files: true

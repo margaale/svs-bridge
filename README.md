@@ -93,7 +93,6 @@ crashes or never connects, the bridge goes back to the previous firmware, so a
 bad update cannot leave a remote bridge unreachable. After restarting, the web
 UI tells whether the new version is running or was rolled back.
 
-Bump `version.txt` for each release so the UI shows which one is running.
 
 ## Home Assistant
 
@@ -137,9 +136,32 @@ unit-tested on the host, with no ESP-IDF or hardware:
 g++ -std=c++17 -Wall -Wextra -Imain -o t test/host/test_svs_vectors.cpp && ./t
 ```
 
-GitHub Actions builds the firmware in the ESP-IDF v6.1 container and runs these
-tests on every push. Pushing a `vX.Y.Z` tag builds and attaches the binaries
-(including the OTA image `svs_bridge.bin`) to a GitHub release.
+## Releases
+
+Work goes to `develop` (the default branch) through pull requests; `master` takes
+what is released. Versions come from GitVersion (`GitVersion.yml`), and CI
+(`.github/workflows/build.yml`) builds with them, the same scheme as
+[Cruller](https://github.com/margaale/Cruller):
+
+- **`master`:** every push is a release, tagged `vX.Y.Z`, with the images. The
+  patch grows with each one; a line `+semver: minor` in a commit message bumps
+  the minor.
+- **`develop`:** every push is a pre-release, `vX.Y.Z-alpha.N`, to try on a
+  board. N is CI's run number, which grows with every build on every branch: a
+  newer build is always a newer version, and a release sorts after its
+  pre-releases. The Bridge tab lists alphas but suggests them only to a bridge
+  already running one.
+- **Pull requests** (into `develop`): built as `X.Y.Z-pr.N`, not published; the
+  images are on the run, one file each.
+
+The images are named `svs-bridge-<version>-esp32s3_n16r8-<file>`:
+`svs_bridge.bin` is the OTA image, `svs_bridge-factory.bin` flashes a new board
+over USB at 0x0, and the bootloader, partition table and OTA data are there for
+a flash in parts. Each release also carries a plain `svs_bridge.bin`, the name
+bridges on 0.1.x look for when updating from GitHub.
+
+CI writes the version to `version.txt` before building; a local build without
+one takes it from `git describe`.
 
 ## Flash layout
 
