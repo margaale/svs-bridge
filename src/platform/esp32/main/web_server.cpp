@@ -24,6 +24,7 @@
 #include "factory_reset.h"
 #include "svs_flasher.h"
 #include "svs_fw_repo.h"
+#include "svs_settings.h"
 #include "svs_usb.h"
 #include "tls_cert.h"
 #include "wifi_manager.h"
@@ -34,6 +35,8 @@ static const char *TAG = "web";
 
 static const size_t MAX_JSON_BODY = 512;
 static const size_t MAX_SVS_HEX = 256 * 1024;  // official SVS .hex files are ~85 KB
+static const size_t MAX_SETTINGS_BODY = 16384;  // 32 inputs with their IR codes
+static const size_t MAX_LAYOUT_BODY = 4096;
 static const size_t OTA_CHUNK = 16384;  // one full TLS record per read
 static const char *PORTAL_URL = "http://192.168.4.1/";
 
@@ -96,11 +99,13 @@ static esp_err_t send_listen_only(httpd_req_t *req)
     return send_json(req, doc);
 }
 
-// Rebooting or updating the bridge now would interrupt the SVS update
+// Rebooting or updating the bridge now would interrupt the SVS update, or
+// talking to the SVS now would interleave with reading or saving its settings
 static esp_err_t send_busy(httpd_req_t *req)
 {
     JsonDocument doc;
-    doc["error"] = "An SVS firmware update is in progress";
+    doc["error"] = svs_settings::busy() ? "The SVS's settings are being read or saved"
+                                        : "An SVS firmware update is in progress";
     httpd_resp_set_status(req, "409 Conflict");
     return send_json(req, doc);
 }
@@ -226,6 +231,8 @@ static void add_svs_info(JsonObject svs)
     svs["live"] = info.live;
     svs["inputs_live"] = info.inputs_live;
     svs["send_enabled"] = svs_usb::send_allowed();
+    // The name given to the active input in the web UI ("" if none)
+    svs["current_input_name"] = info.current_input > 0 ? svs_settings::input_name(info.current_input) : "";
 }
 
 // Why the bridge last started, so unexpected restarts show up remotely
@@ -478,7 +485,7 @@ static esp_err_t ota_apply(size_t total, const std::function<int(uint8_t *, size
 // Receives an uploaded firmware image and applies it to the inactive OTA slot.
 static esp_err_t ota_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (req->content_len == 0) {
@@ -582,7 +589,7 @@ static esp_err_t open_following_redirects(const std::string &url, esp_http_clien
 // Downloads a chosen GitHub release's firmware and applies it over the air.
 static esp_err_t ota_github_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     std::string body;
@@ -644,7 +651,7 @@ static esp_err_t ota_github_post(httpd_req_t *req)
 
 static esp_err_t reboot_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     send_ok(req);
@@ -655,7 +662,7 @@ static esp_err_t reboot_post(httpd_req_t *req)
 // Erases all settings (WiFi, TLS certificate, ...) and reboots into setup mode
 static esp_err_t factory_reset_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     ESP_LOGW(TAG, "Factory reset requested");
@@ -757,6 +764,9 @@ static esp_err_t svs_send_post(httpd_req_t *req)
         return ESP_OK;
     }
     std::string command = body["command"] | "";
+    if (svs_settings::busy()) {
+        return send_busy(req);
+    }
     if (command.empty() || command.size() > 128) {
         return send_error(req, HTTPD_400_BAD_REQUEST, "Enter a command (up to 128 characters)");
     }
@@ -776,7 +786,7 @@ static esp_err_t svs_send_post(httpd_req_t *req)
 // Sets whether the bridge may send to the SVS. Body: {"send": bool}
 static esp_err_t svs_mode_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     JsonDocument body;
@@ -792,6 +802,9 @@ static esp_err_t svs_restart_post(httpd_req_t *req)
 {
     if (!svs_usb::send_allowed()) {
         return send_listen_only(req);
+    }
+    if (svs_settings::busy()) {
+        return send_busy(req);
     }
     esp_err_t err = svs_usb::restart_svs();
     if (err == ESP_ERR_NOT_ALLOWED) {
@@ -809,7 +822,7 @@ static esp_err_t svs_preview_post(httpd_req_t *req)
     if (!svs_usb::send_allowed()) {
         return send_listen_only(req);
     }
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (svs_flasher::start_preview() != ESP_OK) {
@@ -824,7 +837,7 @@ static esp_err_t svs_probe_post(httpd_req_t *req)
     if (!svs_usb::send_allowed()) {
         return send_listen_only(req);
     }
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (svs_flasher::start_probe() != ESP_OK) {
@@ -839,7 +852,7 @@ static esp_err_t svs_check_post(httpd_req_t *req)
     if (!svs_usb::send_allowed()) {
         return send_listen_only(req);
     }
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (svs_flasher::start_check() != ESP_OK) {
@@ -883,7 +896,7 @@ static esp_err_t stage_and_reply(httpd_req_t *req, const std::string &hex, const
 // Body: the .hex file itself; optional X-File-Name header for display
 static esp_err_t svs_firmware_upload_post(httpd_req_t *req)
 {
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     std::string hex;
@@ -905,7 +918,7 @@ static esp_err_t svs_firmware_official_post(httpd_req_t *req)
     }
     std::string name = body["name"] | "";
     std::string hex, error;
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (svs_fw_repo::download(name, hex, &error) != ESP_OK) {
@@ -920,7 +933,7 @@ static esp_err_t svs_flash_post(httpd_req_t *req)
     if (!svs_usb::send_allowed()) {
         return send_listen_only(req);
     }
-    if (svs_flasher::busy()) {
+    if (svs_flasher::busy() || svs_settings::busy()) {
         return send_busy(req);
     }
     if (svs_flasher::start_flash() != ESP_OK) {
@@ -929,6 +942,170 @@ static esp_err_t svs_flash_post(httpd_req_t *req)
                           blocker.empty() ? "Cannot flash right now" : blocker.c_str());
     }
     return svs_get(req);
+}
+
+// ---------------------------------------------------------------------------
+// SVS settings (stored in the SVS) and layout (kept on the bridge)
+// ---------------------------------------------------------------------------
+
+static const char *settings_task_name(svs_settings::Task t)
+{
+    switch (t) {
+    case svs_settings::Task::Reading: return "reading";
+    case svs_settings::Task::Writing: return "writing";
+    default: return "idle";
+    }
+}
+
+// {"task", "phase", "progress", "result", "result_ok", "result_of", "blocker",
+//  "snapshot": null | {"seq", "age_s", "firmware", "inputs", "ir_slots",
+//     "transcoders": {"rgb_to_ypbpr", "ypbpr_to_rgb"},
+//     "v3": [{"scart", "vga"}],
+//     "settings": [{"auto_profile", "rgsb", "sync_bypass", "rgb_to_ypbpr", "ypbpr_to_rgb",
+//                   "ir": [[address, command], ...]}]}}
+static esp_err_t send_svs_config(httpd_req_t *req)
+{
+    svs_settings::Status st = svs_settings::status();
+    JsonDocument doc;
+    doc["task"] = settings_task_name(st.task);
+    doc["phase"] = st.phase;
+    doc["progress"] = st.progress;
+    doc["result"] = st.result;
+    doc["result_ok"] = st.result_ok;
+    doc["result_of"] = settings_task_name(st.result_of);
+    doc["blocker"] = st.blocker;
+    const svs_settings::Snapshot &sn = st.snapshot;
+    if (!sn.valid) {
+        doc["snapshot"] = nullptr;
+        return send_json(req, doc);
+    }
+    JsonObject o = doc["snapshot"].to<JsonObject>();
+    o["seq"] = sn.seq;
+    o["age_s"] = sn.age_ms / 1000;
+    o["firmware"] = sn.firmware;
+    o["inputs"] = sn.inputs;
+    o["ir_slots"] = sn.ir_slots;
+    JsonObject tx = o["transcoders"].to<JsonObject>();
+    tx["rgb_to_ypbpr"] = sn.hardware.tx_rgb_to_ypbpr;
+    tx["ypbpr_to_rgb"] = sn.hardware.tx_ypbpr_to_rgb;
+    JsonArray v3 = o["v3"].to<JsonArray>();
+    JsonArray settings = o["settings"].to<JsonArray>();
+    for (int i = 0; i < sn.inputs; i++) {
+        JsonObject m = v3.add<JsonObject>();
+        m["scart"] = (bool)sn.hardware.scart_v3[i];
+        m["vga"] = (bool)sn.hardware.vga_v3[i];
+        const svs_config::InputSettings &in = sn.settings[i];
+        JsonObject e = settings.add<JsonObject>();
+        e["auto_profile"] = in.auto_profile;
+        e["rgsb"] = in.rgsb;
+        e["sync_bypass"] = in.sync_bypass;
+        e["rgb_to_ypbpr"] = in.rgb_to_ypbpr;
+        e["ypbpr_to_rgb"] = in.ypbpr_to_rgb;
+        JsonArray ir = e["ir"].to<JsonArray>();
+        for (const auto &c : in.ir) {
+            JsonArray pair = ir.add<JsonArray>();
+            pair.add(c.address);
+            pair.add(c.command);
+        }
+    }
+    return send_json(req, doc);
+}
+
+static esp_err_t svs_config_get(httpd_req_t *req)
+{
+    return send_svs_config(req);
+}
+
+static esp_err_t settings_error(httpd_req_t *req, esp_err_t err, const std::string &error)
+{
+    if (err == ESP_ERR_NOT_SUPPORTED) {
+        return send_listen_only(req);
+    }
+    JsonDocument doc;
+    doc["error"] = error.empty() ? esp_err_to_name(err) : error;
+    httpd_resp_set_status(req, err == ESP_ERR_INVALID_ARG ? "400 Bad Request" : "409 Conflict");
+    return send_json(req, doc);
+}
+
+// Reads the settings from the SVS, in the background (poll GET)
+static esp_err_t svs_config_read_post(httpd_req_t *req)
+{
+    if (svs_flasher::busy()) {
+        return send_busy(req);
+    }
+    std::string error;
+    esp_err_t err = svs_settings::start_read(&error);
+    if (err != ESP_OK) {
+        return settings_error(req, err, error);
+    }
+    return send_svs_config(req);
+}
+
+// Body: {"settings": [one entry per input, as in GET]}; saved in the background
+static esp_err_t svs_config_write_post(httpd_req_t *req)
+{
+    if (svs_flasher::busy()) {
+        return send_busy(req);
+    }
+    std::string body_text;
+    if (!read_body(req, MAX_SETTINGS_BODY, body_text)) {
+        return ESP_OK;
+    }
+    JsonDocument body;
+    if (deserializeJson(body, body_text) != DeserializationError::Ok) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+    }
+    std::vector<svs_config::InputSettings> want;
+    for (JsonObjectConst e : body["settings"].as<JsonArrayConst>()) {
+        svs_config::InputSettings in;
+        in.auto_profile = e["auto_profile"] | true;
+        in.rgsb = e["rgsb"] | false;
+        in.sync_bypass = e["sync_bypass"] | false;
+        in.rgb_to_ypbpr = e["rgb_to_ypbpr"] | false;
+        in.ypbpr_to_rgb = e["ypbpr_to_rgb"] | false;
+        for (JsonArrayConst pair : e["ir"].as<JsonArrayConst>()) {
+            int a = pair[0] | -1, c = pair[1] | -1;
+            // 0xFF marks the end of a list, so it cannot be an address
+            if (pair.size() != 2 || a < 0 || a >= 0xFF || c < 0 || c > 0xFF) {
+                return send_error(req, HTTPD_400_BAD_REQUEST, "Invalid IR code");
+            }
+            in.ir.push_back({(uint8_t)a, (uint8_t)c});
+        }
+        want.push_back(in);
+    }
+    std::string error;
+    esp_err_t err = svs_settings::start_write(want, &error);
+    if (err != ESP_OK) {
+        return settings_error(req, err, error);
+    }
+    return send_svs_config(req);
+}
+
+static esp_err_t send_layout(httpd_req_t *req)
+{
+    std::string json = svs_settings::layout_json();
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, json.data(), json.size());
+}
+
+static esp_err_t svs_layout_get(httpd_req_t *req)
+{
+    return send_layout(req);
+}
+
+// Body: {"inputs": [{"kind", "name"}], "outputs": [{"kind", "name"}]}
+static esp_err_t svs_layout_post(httpd_req_t *req)
+{
+    std::string body;
+    if (!read_body(req, MAX_LAYOUT_BODY, body)) {
+        return ESP_OK;
+    }
+    std::string error;
+    if (svs_settings::set_layout_json(body, &error) != ESP_OK) {
+        return send_error(req, HTTPD_400_BAD_REQUEST, error.c_str());
+    }
+    return send_layout(req);
 }
 
 // ---------------------------------------------------------------------------
@@ -1214,6 +1391,11 @@ static const RouteEntry HTTPS_ROUTES[] = {
     {"/device/svs/firmware", HTTP_POST, {svs_firmware_upload_post, Access::Admin, false}},
     {"/device/svs/firmware/official", HTTP_POST, {svs_firmware_official_post, Access::Admin, false}},
     {"/device/svs/firmware/flash", HTTP_POST, {svs_flash_post, Access::Admin, false}},
+    {"/device/svs/config", HTTP_GET, {svs_config_get, Access::Admin, false}},
+    {"/device/svs/config/read", HTTP_POST, {svs_config_read_post, Access::Admin, false}},
+    {"/device/svs/config/write", HTTP_POST, {svs_config_write_post, Access::Admin, false}},
+    {"/device/svs/layout", HTTP_GET, {svs_layout_get, Access::Admin, false}},
+    {"/device/svs/layout", HTTP_POST, {svs_layout_post, Access::Admin, false}},
     {"/device/cruller", HTTP_GET, {cruller_get, Access::Admin, false}},
     {"/device/cruller/scan", HTTP_POST, {cruller_scan_post, Access::Admin, false}},
     {"/device/cruller/select", HTTP_POST, {cruller_select_post, Access::Admin, false}},

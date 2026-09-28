@@ -30,6 +30,7 @@
 #include "cruller.h"
 #include "factory_reset.h"
 #include "svs_flasher.h"
+#include "svs_settings.h"
 #include "svs_usb.h"
 #include "tls_cert.h"
 #include "web_server.h"
@@ -118,6 +119,7 @@ extern "C" void app_main(void)
 
     svs_usb::start();
     svs_flasher::init();
+    svs_settings::init();
     wifi_manager::start();
     cruller::start();  // after wifi_manager, which starts mDNS
     ESP_ERROR_CHECK(auth::load());

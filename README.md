@@ -41,6 +41,36 @@ confirmed by the SVS author:
 For the intended use — watch the active input and act on the RetroTINK — the
 bridge only listens to the SVS, so the HD-15 can stay connected.
 
+## Your switch and the SVS's settings
+
+The **SVS** tab shows the switch as its modules sit: the outputs, the control
+module in the middle, the inputs. It replaces the official SVS Management
+Utility for day-to-day settings:
+
+- **What each module is.** The SVS only counts its inputs and recognises V3
+  SCART/VGA modules and transcoders; pick the other modules (SCART, Component,
+  VGA, S-Video/composite, D-Terminal) and add the outputs (SCART, Component,
+  VGA, S-Video/composite, BNC, up to 6), and name them. Drag a module to move
+  it, inputs among inputs and outputs among outputs (Alt+←/→ with the
+  keyboard). This is kept on the bridge; the name of the active input also
+  goes to Home Assistant (`current_input_name`).
+- **Settings stored in the SVS**, per input: RGB → YPbPr and YPbPr → RGB
+  transcoding, sync on green and sync bypass (V3 modules), auto profile, and
+  the IR codes the SVS sends the scaler (with the official utility's presets
+  for the RetroTINK 4K, 5X and the OSSCs). **Read from the SVS**, change them,
+  **Save to the SVS**. Moving an input takes its settings along, to be saved.
+
+Reading and saving send commands, so the RetroTINK's HD-15 must be unplugged
+(see above): the page asks first, turns sending on for the operation and back
+to listen-only afterwards. It needs SVS firmware 1.20 or newer.
+
+These use commands the SVS's serial documentation does not list, taken from
+the official utility: `R<addr>` reads a byte of the control module's EEPROM,
+`W<vvv><addr>` writes one, `Y<n>`/`G<n>` read the transcoders of input n. The
+EEPROM map is in `src/core/svs_config.h`. The bridge writes only bytes it has
+read and that change, reads each one back, and changes a transcoder by
+switching to that input (as the utility does), then back to the one on screen.
+
 ## First setup
 
 1. Power the bridge. With no WiFi configured it creates the open network
@@ -101,8 +131,8 @@ react to the active input changing (turn on a TV, load a RetroTINK profile, …)
 No cloud, no MQTT — Home Assistant polls the bridge over the LAN.
 
 - `GET /api/v1/info` — device identity (id, name, model, firmware) for setup.
-- `GET /api/v1/state` — live SVS state (connected, current/total inputs,
-  firmware) and bridge diagnostics (WiFi RSSI, uptime).
+- `GET /api/v1/state` — live SVS state (connected, current/total inputs, the
+  active input's name, firmware) and bridge diagnostics (WiFi RSSI, uptime).
 
 Both need an `Authorization: Bearer <token>` header. The token is shown in the
 web UI's **Home Assistant** tab (copy or regenerate it there). The bridge also
@@ -144,8 +174,8 @@ that Cruller's own Cruller tab to move it to this one.
 The same layout as [Cruller](https://github.com/margaale/Cruller):
 
 - `src/core`: the pure logic, with no ESP-IDF — the AVR reset-vector patch
-  (`svs_vectors.h`), the Intel HEX decoder (`svs_hex.h`) and the SVS line parsing
-  (`svs_protocol.h`).
+  (`svs_vectors.h`), the Intel HEX decoder (`svs_hex.h`), the SVS line parsing
+  (`svs_protocol.h`) and the SVS's settings map (`svs_config.h`).
 - `src/platform/esp32`: the ESP32-S3 target, an ESP-IDF project (`sdkconfig.defaults`,
   `partitions.csv`, `dependencies.lock`); its code in `main/`.
 - `src/web`: the main page and the setup portal, and `embed.cmake`, which turns

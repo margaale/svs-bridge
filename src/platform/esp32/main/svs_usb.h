@@ -52,6 +52,23 @@ esp_err_t restart_svs();
 // while a firmware update holds the link.
 esp_err_t send(const std::string &cmd);
 
+// --- Settings sessions ---------------------------------------------------------
+//
+// Reading and writing the SVS's settings (see svs_settings.h) sends hundreds of
+// short commands. During a session they and the SVS's answers stay out of the
+// traffic log, which gets a summary instead.
+
+void session_begin();
+void session_end();
+
+// Sends a command and waits for the SVS's answer: the next line that is not
+// one of its "SVS ..." status lines (how R, Y and G answer). Only inside a
+// session. Same errors as send(), plus ESP_ERR_TIMEOUT.
+esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms);
+
+// Sends a command inside a session, without logging it. Same errors as send().
+esp_err_t send_quiet(const std::string &cmd);
+
 // --- Traffic log -------------------------------------------------------------
 //
 // The last lines exchanged with the SVS, for the web UI. dir is '<' for text
