@@ -477,7 +477,8 @@ esp_err_t start_write(const std::vector<InputSettings> &want_in, std::string *er
 static bool valid_kind(const std::string &kind, bool output)
 {
     static const char *IN[] = {"", "scart", "component", "vga", "svideo", "dterm"};  // "": not set up yet
-    static const char *OUT[] = {"scart", "component", "vga", "svideo", "bnc"};
+    // Outputs, and the transcoders where they sit among them
+    static const char *OUT[] = {"scart", "component", "vga", "svideo", "bnc", "tx_rgb_to_ypbpr", "tx_ypbpr_to_rgb"};
     if (output) {
         for (const char *k : OUT) {
             if (kind == k) return true;
@@ -506,10 +507,12 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
         bool output = strcmp(list, "outputs") == 0;
         JsonArrayConst src = in[list].as<JsonArrayConst>();
         JsonArray dst = doc[list].to<JsonArray>();
-        if (src.size() > (output ? MAX_OUTPUTS : (size_t)MAX_INPUTS)) {
+        if (src.size() > (output ? MAX_OUTPUTS + 2 : (size_t)MAX_INPUTS)) {
             *error = output ? "At most 6 outputs" : "At most 32 inputs";
             return false;
         }
+        size_t outputs = 0;
+        bool tx_seen[2] = {false, false};
         for (JsonObjectConst e : src) {
             std::string kind = e["kind"] | "";
             std::string name = e["name"] | "";
@@ -519,6 +522,18 @@ static bool normalize(const std::string &json, std::string &out, std::vector<std
             }
             if (name.size() > MAX_NAME) {
                 *error = "Names are up to 32 characters";
+                return false;
+            }
+            if (output && kind.rfind("tx_", 0) == 0) {
+                bool &seen = tx_seen[kind == "tx_rgb_to_ypbpr" ? 0 : 1];
+                if (seen) {
+                    *error = "A transcoder can only be placed once";
+                    return false;
+                }
+                seen = true;
+                name.clear();
+            } else if (output && ++outputs > MAX_OUTPUTS) {
+                *error = "At most 6 outputs";
                 return false;
             }
             JsonObject o = dst.add<JsonObject>();

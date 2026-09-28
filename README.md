@@ -52,7 +52,8 @@ Utility for day-to-day settings:
   VGA, S-Video/composite, D-Terminal) and add the outputs (SCART, Component,
   VGA, S-Video/composite, BNC, up to 6), and name them. Drag a module to move
   it, inputs among inputs and outputs among outputs (Alt+←/→ with the
-  keyboard). This is kept on the bridge; the name of the active input also
+  keyboard). Transcoders move among the outputs too: one converts only the
+  outputs past it, further from the control module. This is kept on the bridge; the name of the active input also
   goes to Home Assistant (`current_input_name`).
 - **Settings stored in the SVS**, per input: RGB → YPbPr and YPbPr → RGB
   transcoding, sync on green and sync bypass (V3 modules), auto profile, and
