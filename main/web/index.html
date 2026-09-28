@@ -2,390 +2,334 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>SVS Bridge</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Cpath d='M8 12h14l-4-4M24 20H10l4 4' stroke='white' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='10' fill='none' stroke='%23E8618C' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <style>
-  :root {
-    --bg: #f4f5f7; --card: #ffffff; --text: #1d2129; --muted: #6b7280;
-    --border: #e2e5ea; --accent: #2563eb; --ok: #15803d; --bad: #b91c1c; --warn: #b45309;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #111318; --card: #1b1e25; --text: #e6e8ec; --muted: #9aa1ad;
-      --border: #2c313b; --accent: #5b8cff; --ok: #4ade80; --bad: #f87171; --warn: #fbbf24;
-    }
-  }
-  * { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  main { max-width: 560px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 22px; margin: 8px 0 16px; display: flex; align-items: baseline; gap: 8px; }
-  h1 small { font-size: 13px; color: var(--muted); font-weight: normal; }
-  h2 { font-size: 16px; margin: 0 0 12px; }
-  section {
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    padding: 16px; margin-bottom: 16px;
-  }
-  dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
-  dt { color: var(--muted); }
-  dd { margin: 0; overflow-wrap: anywhere; }
-  .ok { color: var(--ok); } .bad { color: var(--bad); } .muted { color: var(--muted); } .warn { color: var(--warn); }
-  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
-  .small { font-size: 13px; margin-top: 10px; }
-  label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
-  input[type=text], input[type=password], select {
-    width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--bg); color: var(--text); font: inherit;
-  }
-  button {
-    margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 6px;
-    background: var(--accent); color: #fff; font: inherit; cursor: pointer;
-  }
-  button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border); }
-  button.danger { background: transparent; color: var(--bad); border: 1px solid var(--bad); }
-  button + button { margin-left: 8px; }
-  button:disabled { opacity: .5; cursor: default; }
-  .lock { width: 12px; height: 12px; color: var(--muted); flex: none; }
-  .bars { color: var(--muted); flex: none; }
-  .combo-row { display: flex; gap: 8px; align-items: stretch; }
-  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .btn-row button { width: auto; flex: 1; min-width: 120px; }
-  .combo { position: relative; flex: 1; }
-  .combo input { padding-right: 40px; }
-  .combo-toggle {
-    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
-    display: flex; line-height: 0;
-  }
-  .combo-list {
-    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 10;
-    list-style: none; margin: 0; padding: 4px; max-height: 260px; overflow-y: auto;
-    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
-  }
-  .combo-list li {
-    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; cursor: pointer;
-  }
-  .combo-list li:hover, .combo-list li.active { background: var(--bg); }
-  .combo-list .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .combo-list li.note { color: var(--muted); cursor: default; }
-  .combo-list li.note:hover { background: transparent; }
-  button.icon { margin: 0; padding: 0 10px; display: flex; align-items: center; line-height: 0; }
-  .log-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 14px; }
-  .log-head label { margin-bottom: 4px; }
-  button.link { margin: 0; padding: 0; background: transparent; color: var(--accent); font-size: 13px; }
-  .log {
-    height: 220px; overflow-y: auto; padding: 8px 10px; border: 1px solid var(--border);
-    border-radius: 6px; background: var(--bg);
-    font: 12px/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere;
-  }
-  .log .t { color: var(--muted); }
-  .log .tx { color: var(--accent); }
-  .log .ev { color: var(--muted); font-style: italic; }
-  .log .empty { color: var(--muted); }
-  .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; margin: 4px 0; }
-  .toggle input { width: 18px; height: 18px; cursor: pointer; }
-  .send-row { display: flex; gap: 8px; margin-top: 8px; }
-  .send-row input { flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: 13px; }
-  .send-row button { margin: 0; }
-  /* File picker: the native input stays (for keyboard and forms) but hidden
-     behind a button-styled label and the chosen file name */
-  .file { display: flex; align-items: center; gap: 12px; min-width: 0; }
-  .file-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
-  label.btn {
-    display: inline-block; margin: 0; padding: 9px 16px; border-radius: 6px; cursor: pointer;
-    font-size: 15px; white-space: nowrap;
-  }
-  label.btn.secondary { color: var(--accent); border: 1px solid var(--border); background: transparent; }
-  label.btn:hover { background: var(--bg); }
-  .file-input:focus-visible + label.btn { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .file-input:disabled + label.btn { opacity: .5; cursor: default; pointer-events: none; }
-  .file-name { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-name.chosen { color: var(--text); }
-  button.icon.spin svg { animation: spin 0.9s linear infinite; }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .pw { position: relative; }
-  .pw input { padding-right: 40px; }
-  .pw button.eye {
-    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-    margin: 0; padding: 6px; background: transparent; border: 0; color: var(--muted);
-    display: flex; line-height: 0;
-  }
-  .pw button.eye:hover { color: var(--text); }
-  .staged { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-  progress { width: 100%; height: 8px; margin-top: 12px; }
-  .msg { margin-top: 10px; min-height: 1.2em; }
-  a { color: var(--accent); }
-  /* Primary navigation: one area at a time instead of one long scroll */
-  .tabs { display: flex; gap: 2px; margin: 0 0 16px; overflow-x: auto; border-bottom: 1px solid var(--border); }
-  .tabs button {
-    margin: 0; padding: 9px 14px; background: transparent; color: var(--muted); border: 0;
-    border-bottom: 2px solid transparent; border-radius: 0; font-weight: 500; white-space: nowrap;
-  }
-  .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tabs button:hover { color: var(--text); }
-  /* Secondary tabs, e.g. firmware source (GitHub vs a manual file) */
-  .subtabs { display: flex; gap: 6px; margin: 4px 0 12px; }
-  .subtabs button {
-    margin: 0; padding: 6px 12px; font-size: 13px; background: var(--bg); color: var(--muted);
-    border: 1px solid var(--border); border-radius: 999px;
-  }
-  .subtabs button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
-  /* Custom confirm dialog (native confirm() is unavailable in the app pane) */
-  .modal {
-    position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;
-    padding: 16px; background: rgba(0, 0, 0, .5);
-  }
-  .modal-box {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px;
-    max-width: 400px; width: 100%; box-shadow: 0 12px 40px rgba(0, 0, 0, .4);
-  }
-  .modal-box p { margin: 0 0 18px; white-space: pre-line; }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
-  .modal-actions button { margin: 0; }
+/* Same design as Cruller's page (margaale/Cruller src/web/index.html) */
+:root{--bg:#121315;--panel:#1B1D21;--raised:#23262B;--line:#2E3238;--rule:#26292E;--text:#ECEAE4;--soft:#B3B7BD;--muted:#A3A7AE;--faint:#8A8E95;--accent:#E8618C;--ok:#4CC38A;--warn:#F0B44C;--bad:#F07A74;--blue:#4FB3D9;--well:#0E0F11;
+--sans:'IBM Plex Sans',system-ui,sans-serif;--head:'Chakra Petch','IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 var(--sans)}
+header{display:flex;align-items:center;gap:14px;height:64px;padding:0 24px;border-bottom:1px solid var(--rule)}
+.logo{display:flex;align-items:center;gap:10px;font:700 22px var(--head);letter-spacing:.02em}
+nav.tabs{display:flex;align-self:stretch;gap:4px;margin-left:16px;overflow-x:auto;scrollbar-width:none;min-width:0}
+nav.tabs a{display:flex;align-items:center;padding:0 14px;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs a[aria-current]{color:var(--text);font-weight:600;border-color:var(--accent)}
+.grow{flex-grow:1}
+.chip{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:#C9CCD1;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:#E0453F}
+main{padding:20px 24px;max-width:1440px;margin:auto}
+[hidden]{display:none!important}
+.panel{background:var(--panel);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;row-gap:8px;column-gap:12px;font-size:14px}
+.kv>:nth-child(odd){color:var(--soft)}.kv>:nth-child(even){font-family:var(--mono);text-align:right;overflow-wrap:anywhere}
+.mono{font-family:var(--mono)}.small{font-size:12px;color:var(--faint)}
+.big{font-size:22px;font-weight:600;font-family:var(--mono)}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.span2{grid-column:span 2}.span3{grid-column:span 3}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+button,.btn{font:500 14px var(--sans);color:var(--text);background:transparent;border:1px solid var(--line);border-radius:10px;height:38px;padding:0 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+button.primary,.btn.primary{background:var(--accent);color:#1A0B11;border:0;font-weight:600}
+button.danger{color:var(--bad);border-color:#5A2A28}
+button.primary.danger{background:#D9443E;color:#fff}
+button:disabled{opacity:.5;cursor:default}
+button.link{border:0;color:var(--accent);height:28px;padding:0 6px;font-weight:600}
+input,select{font:14px var(--sans);color:var(--text);background:var(--well);border:1px solid var(--line);border-radius:8px;height:38px;padding:0 10px;width:100%;min-width:0}
+input[readonly]{color:var(--soft)}
+pre,.log{margin:0;background:var(--well);border-radius:8px;padding:10px 12px;font:12px/1.55 var(--mono);color:#C9CCD1;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+a.more{color:var(--accent);text-decoration:none;font-weight:500;font-size:14px}
+.msg{font-size:13px;color:var(--soft);min-height:0}.msg:empty{display:none}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.msg.warn{color:var(--warn)}
+.refresh{flex:none;width:38px;height:38px;padding:0;display:grid;place-items:center}.refresh.spin svg{animation:spin 1.1s linear infinite}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.upd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px}
+/* dialog and full-page overlay */
+dialog#ask{max-width:440px;width:calc(100% - 32px);padding:22px 22px 18px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 60px #000a}
+dialog#ask::backdrop{background:#0008;backdrop-filter:blur(2px)}
+dialog#ask h3{margin:0 0 8px;font:700 19px var(--head)}
+dialog#ask p{margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--soft);white-space:pre-line;overflow-wrap:anywhere}
+.busy{position:fixed;inset:0;z-index:50;background:#0c0d0fe6;backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px}
+.busy-box{max-width:380px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.busy h3{margin:6px 0 0;font:700 22px var(--head)}.busy p{margin:0;font-size:15px;line-height:1.5;color:var(--soft);white-space:pre-line;overflow-wrap:anywhere}
+.ring{position:relative;width:120px;height:120px}.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:6}.ring .track{stroke:#2B2F35}.ring .arc{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:276.5;stroke-dashoffset:0;transition:stroke-dashoffset .6s linear,stroke .3s}
+.ring.spin svg{animation:spin 1.1s linear infinite}.ring.spin .arc{stroke-dashoffset:200;transition:none}
+.ring.ok .arc{stroke:var(--ok)}.ring.bad .arc{stroke:#E0453F}
+.ring>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:600 30px var(--mono)}
+.ring>#busy-icon{font:600 44px var(--sans)}.ring.ok>#busy-icon{color:var(--ok)}.ring.bad>#busy-icon{color:#E0453F}
+/* SVS tab */
+.svs-now{display:flex;flex-direction:column;align-items:center;padding:12px 0}
+.svs-now>span:first-child{font:700 72px/1 var(--head)}
+.svs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px}
+.svs-grid div{height:64px;border-radius:10px;background:var(--raised);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font:700 22px var(--head);color:var(--faint)}
+.svs-grid div small{font:500 11px var(--sans);letter-spacing:.04em}
+.svs-grid div.on{background:#3A1E2A;border-color:var(--accent);color:var(--text)}
+.log{height:260px}
+.log .t{color:var(--faint)}.log .tx{color:var(--accent)}.log .ev{color:var(--faint);font-style:italic}.log .empty{color:var(--faint)}
+.switch{display:flex;align-items:center;gap:12px;cursor:pointer;font-size:14px;font-weight:500}
+.switch input{appearance:none;-webkit-appearance:none;width:40px;height:22px;flex:none;border-radius:11px;background:#2B2F35;border:1px solid var(--line);position:relative;padding:0;cursor:pointer;transition:background .15s}
+.switch input::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch input:checked{background:#3A1E2A;border-color:var(--accent)}.switch input:checked::after{transform:translateX(18px);background:var(--accent)}
+.note{background:var(--raised);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;color:var(--soft)}
+.note.warn{background:#2A2416;color:#E3CFA3}
+.steps{list-style:none;margin:0;padding:14px 16px;background:var(--raised);border-radius:10px;display:flex;flex-direction:column;gap:14px}
+.steps>li{display:flex;gap:12px;align-items:flex-start;font-size:14px}
+.steps .sb{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.steps .st{font-weight:600}
+.steps .si{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid #6B6F76;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
+.steps>li[data-state=wait]{color:var(--faint)}
+.steps>li[data-state=run] .si{border-color:var(--accent);border-top-color:transparent;animation:spin 1s linear infinite}
+.steps>li[data-state=done] .si{border-color:var(--ok);color:var(--ok)}.steps>li[data-state=done] .si::before{content:'✓'}
+.steps>li[data-state=fail] .si{border-color:#E0453F;color:#E0453F}.steps>li[data-state=fail] .si::before{content:'✕'}
+/* Wi-Fi network picker (type to filter, or a hidden network by name) */
+.combo{position:relative;flex:1;min-width:0}
+.combo input{padding-right:40px}
+.combo-toggle{position:absolute;right:2px;top:2px;width:34px;height:34px;padding:0;border:0;color:var(--faint)}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:10;list-style:none;margin:0;padding:4px;max-height:260px;overflow-y:auto;background:var(--raised);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px #0009}
+.combo-list li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:7px;cursor:pointer;font-size:14px}
+.combo-list li:hover,.combo-list li.active{background:#2B2F35}
+.combo-list .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo-list li.note{color:var(--faint);cursor:default;background:none;padding:9px 10px}
+.lock,.bars{color:var(--faint);flex:none}
+.pw{position:relative;flex:1;min-width:0}.pw input{padding-right:40px}
+.pw button.eye{position:absolute;right:2px;top:2px;width:34px;height:34px;padding:0;border:0;color:var(--faint)}
+.pw button.eye:hover{color:var(--text)}
+.stack{display:flex;flex-direction:column;gap:8px}
+label.lbl{font-size:13px;font-weight:500;color:var(--soft)}
+/* sign-in (create the password / log in) */
+body.auth header nav,body.auth header .chip{display:none}
+.wiz{max-width:430px;margin:auto;display:flex;flex-direction:column;gap:16px;padding-top:6vh}
+.wiz h1{margin:0 0 6px;font:700 26px/32px var(--head)}.wiz p{margin:0;font-size:15px;line-height:22px;color:var(--soft)}
+.wiz input{height:48px;font-size:16px;border-radius:10px}
+.wiz .pw button.eye{width:44px;height:44px}
+button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
+@media (max-width:1000px){.grid3{grid-template-columns:minmax(0,1fr)}.span2,.span3{grid-column:auto}.upd{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){header{padding:0 12px;gap:8px}body:not(.auth) .logo span{display:none}nav.tabs{margin-left:0}nav.tabs a{padding:0 8px}.hide-sm{display:none}main{padding:16px}}
 </style>
 </head>
-<body>
+<body class="auth">
+<header>
+<div class="logo"><svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#E8618C" stroke-width="4" aria-hidden="true"><circle cx="14" cy="14" r="10"/></svg><span>SVS Bridge</span></div>
+<nav class="tabs" aria-label="Sections"><a href="#svs" data-tab="svs">SVS</a><a href="#bridge" data-tab="bridge">Bridge</a><a href="#ha" data-tab="ha">Home Assistant</a></nav>
+<div class="grow"></div>
+<div class="chip hide-sm" id="chip-svs"><span class="dot" id="svs-dot"></span><span id="svs-chip">Connecting…</span></div>
+<div class="chip hide-sm" id="chip-wifi" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></svg><span id="wifi-chip"></span></div>
+<div class="chip mono hide-sm" id="chip-ver" hidden></div>
+</header>
+
 <main>
-  <h1>SVS Bridge <small id="version"></small></h1>
+<!-- Sign-in: shown until logged in -->
+<section id="create" class="wiz" hidden>
+<div><h1>Create the admin password</h1><p>You will use it to log in to the bridge. At least 8 characters.</p></div>
+<form id="create-form" class="stack">
+<input type="text" name="username" value="admin" autocomplete="username" hidden>
+<label class="lbl" for="new-pw">Password</label>
+<input type="password" id="new-pw" autocomplete="new-password" minlength="8" maxlength="64">
+<label class="lbl" for="new-pw2">Repeat password</label>
+<input type="password" id="new-pw2" autocomplete="new-password" minlength="8" maxlength="64">
+<div class="msg" id="create-msg"></div>
+<button type="submit" class="primary big">Continue</button>
+</form>
+</section>
 
-  <!-- Shown until logged in -->
-  <section id="create" hidden>
-    <h2>Create the admin password</h2>
-    <p class="muted small">You will use it to log in to the bridge. At least 8 characters.</p>
-    <form id="create-form">
-      <input type="text" name="username" value="admin" autocomplete="username" hidden>
-      <label for="new-pw">Password</label>
-      <input type="password" id="new-pw" autocomplete="new-password" minlength="8" maxlength="64">
-      <label for="new-pw2">Repeat password</label>
-      <input type="password" id="new-pw2" autocomplete="new-password" minlength="8" maxlength="64">
-      <button type="submit">Continue</button>
-    </form>
-    <div class="msg" id="create-msg"></div>
-  </section>
+<section id="login" class="wiz" hidden>
+<div><h1>Log in</h1><p>Enter the bridge's admin password.</p></div>
+<form id="login-form" class="stack">
+<input type="text" name="username" value="admin" autocomplete="username" hidden>
+<label class="lbl" for="login-pw">Admin password</label>
+<input type="password" id="login-pw" autocomplete="current-password" maxlength="64">
+<div class="msg" id="login-msg"></div>
+<button type="submit" class="primary big">Log in</button>
+</form>
+<div class="small">Forgot it? Hold the BOOT button for 10 s to erase all settings.</div>
+</section>
 
-  <section id="login" hidden>
-    <h2>Log in</h2>
-    <form id="login-form">
-      <input type="text" name="username" value="admin" autocomplete="username" hidden>
-      <label for="login-pw">Admin password</label>
-      <input type="password" id="login-pw" autocomplete="current-password" maxlength="64">
-      <button type="submit">Log in</button>
-    </form>
-    <div class="msg" id="login-msg"></div>
-    <p class="muted small">Forgot it? Hold the BOOT button for 10 s to erase all settings.</p>
-  </section>
-
-  <div id="app" hidden>
-    <nav class="tabs" id="tabs">
-      <button data-tab="svs" class="active">SVS</button>
-      <button data-tab="bridge">Bridge</button>
-      <button data-tab="settings">Settings</button>
-    </nav>
-
-    <div class="tab" data-tab="svs">
-    <section>
-      <h2>SVS</h2>
-      <dl>
-        <dt>Connection</dt><dd id="svs-conn">…</dd>
-        <dt>Firmware</dt><dd id="svs-fw">…</dd>
-        <dt>Inputs</dt><dd id="svs-inputs">…</dd>
-      </dl>
-      <label class="toggle" id="svs-send-label" hidden>
-        <input type="checkbox" id="svs-send-toggle">
-        <span>Send commands to the SVS</span>
-      </label>
-      <div class="muted small" id="svs-mode-hint"></div>
-      <button class="secondary" id="svs-restart-btn" hidden>Restart SVS</button>
-      <div class="msg" id="svs-restart-msg"></div>
-      <div class="log-head">
-        <label>Serial log</label>
-        <button type="button" class="link" id="svs-log-clear">Clear</button>
-      </div>
-      <div class="log" id="svs-log" role="log" aria-live="polite"></div>
-      <form id="svs-send-form" class="send-row" autocomplete="off">
-        <input type="text" id="svs-cmd" maxlength="128" placeholder="Command, e.g. SVS_Input_Up"
-               aria-label="Command to send to the SVS">
-        <button type="submit" class="secondary" id="svs-send-btn">Send</button>
-      </form>
-      <div class="msg" id="svs-send-msg"></div>
-    </section>
-
-    <section id="svs-fw-section" hidden>
-      <h2>SVS firmware update</h2>
-      <div class="muted small">Identifies the SVS bootloader first. The SVS restarts, so video
-        drops for a moment. Nothing is written until you press Flash SVS.</div>
-      <button class="secondary" id="svs-check-btn">Prepare update</button>
-      <dl id="svs-boot-row" class="staged" hidden>
-        <dt>Bootloader</dt><dd id="svs-boot"></dd>
-      </dl>
-      <div id="svs-vector" hidden>
-        <button class="secondary" id="svs-preview-btn">Preview vector patch</button>
-        <div class="muted small">This bootloader needs the reset vector patched when flashing. The
-          preview checks —without writing anything— that the patch the bridge would write matches
-          what the official tool already put on the chip. Required before flashing.</div>
-      </div>
-      <div class="msg" id="svs-check-msg"></div>
-      <div id="svs-probe" hidden>
-        <button class="secondary" id="svs-probe-btn">Diagnose bootloader</button>
-        <div class="muted small">Restarts the SVS a few times, listening and trying to reach its
-          bootloader with other timings and speeds. Results go to the serial log. Nothing is written.</div>
-      </div>
-
-      <div id="svs-controls" hidden>
-        <label for="svs-rel">Official releases</label>
-        <select id="svs-rel"><option value="">Choose a version…</option></select>
-        <label for="svs-file">Or a .hex file</label>
-        <div class="file">
-          <input type="file" id="svs-file" class="file-input" accept=".hex">
-          <label for="svs-file" class="btn secondary">Choose file</label>
-          <span class="file-name">No file chosen</span>
-        </div>
-
-        <div class="staged" id="svs-staged" hidden>
-          <dl>
-            <dt>Firmware</dt><dd id="svs-src"></dd>
-            <dt>Size</dt><dd id="svs-size"></dd>
-            <dt>SHA-256</dt><dd id="svs-sha" class="mono muted"></dd>
-          </dl>
-          <button class="danger" id="svs-flash-btn">Flash SVS</button>
-          <div class="msg bad" id="svs-blocker"></div>
-        </div>
-      </div>
-      <progress id="svs-progress" value="0" max="100" hidden></progress>
-      <div class="msg" id="svs-msg"></div>
-    </section>
-    </div><!-- /svs tab -->
-
-    <div class="tab" data-tab="bridge" hidden>
-    <section>
-      <h2>Bridge</h2>
-      <dl>
-        <dt>WiFi</dt><dd id="st-wifi">…</dd>
-        <dt>Firmware</dt><dd id="st-fw">…</dd>
-        <dt>Uptime</dt><dd id="st-up">…</dd>
-        <dt>Certificate</dt>
-        <dd><span id="st-tls"></span><br>
-          <span id="st-fp" class="mono muted"></span><br>
-          <a href="/device/cert">Download certificate</a></dd>
-      </dl>
-    </section>
-
-    <section>
-      <h2>WiFi network</h2>
-      <form id="wifi-form" autocomplete="off">
-      <label for="ssid">Network</label>
-      <div class="combo-row">
-        <div class="combo">
-          <input type="text" id="ssid" autocomplete="off" maxlength="32" placeholder="Choose or type a network"
-                 role="combobox" aria-controls="ssid-list" aria-autocomplete="list">
-          <button type="button" class="combo-toggle" id="ssid-toggle" aria-label="Show networks">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <ul class="combo-list" id="ssid-list" role="listbox" hidden></ul>
-        </div>
-        <button type="button" class="secondary icon" id="scan-btn" aria-label="Scan again" title="Scan again">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"
-               stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/>
-            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-        </button>
-      </div>
-      <label for="password">Password</label>
-      <input type="password" id="password" autocomplete="off" maxlength="63">
-      <button type="submit" id="wifi-btn">Connect</button>
-      </form>
-      <div class="msg" id="wifi-msg"></div>
-    </section>
-
-    <section>
-      <h2>Bridge firmware update</h2>
-      <dl><dt>Running</dt><dd id="fw-current">…</dd></dl>
-      <nav class="subtabs" id="fw-tabs">
-        <button type="button" data-fwtab="github" class="active">From GitHub</button>
-        <button type="button" data-fwtab="manual">Manual file</button>
-      </nav>
-
-      <div class="fwtab" data-fwtab="github">
-        <label for="fw-rel">Available releases</label>
-        <select id="fw-rel"><option value="">Loading…</option></select>
-        <div class="msg" id="fw-gh-msg"></div>
-        <button class="danger" id="fw-gh-btn" disabled>Update to this version</button>
-        <div class="muted small">Downloads the firmware straight from GitHub and installs it. The
-          bridge restarts and rolls back if the new version fails to start.</div>
-      </div>
-
-      <div class="fwtab" data-fwtab="manual" hidden>
-        <label for="fw-file">Firmware file (<span class="mono">build/svs_bridge.bin</span>)</label>
-        <div class="file">
-          <input type="file" id="fw-file" class="file-input" accept=".bin">
-          <label for="fw-file" class="btn secondary">Choose file</label>
-          <span class="file-name">No file chosen</span>
-        </div>
-        <div class="staged" id="fw-staged" hidden>
-          <dl>
-            <dt>Firmware</dt><dd id="fw-version"></dd>
-            <dt>Built</dt><dd id="fw-built"></dd>
-            <dt>Size</dt><dd id="fw-size"></dd>
-            <dt>SHA-256</dt><dd id="fw-sha" class="mono muted"></dd>
-          </dl>
-          <button class="danger" id="fw-btn">Update bridge</button>
-          <div class="muted small">The bridge restarts into the new version and goes back to the
-            current one if the new one fails to start.</div>
-        </div>
-      </div>
-
-      <progress id="fw-progress" value="0" max="100" hidden></progress>
-      <div class="msg" id="fw-msg"></div>
-    </section>
-
-    <section>
-      <h2>Device</h2>
-      <button class="secondary" id="logout-btn">Log out</button>
-      <button class="secondary" id="reboot-btn">Reboot</button>
-      <button class="danger" id="reset-btn">Factory reset</button>
-      <div class="muted small">Factory reset erases the WiFi settings, the admin password and
-        the certificate. The bridge restarts in setup mode with its own network.</div>
-      <div class="msg" id="device-msg"></div>
-    </section>
-    </div><!-- /bridge tab -->
-
-    <div class="tab" data-tab="settings" hidden>
-    <section>
-      <h2>Home Assistant</h2>
-      <p class="muted small">The bridge is discovered automatically on your network. Paste this API
-        token when adding it, so Home Assistant can read the SVS state.</p>
-      <label for="api-token">API token</label>
-      <input type="password" id="api-token" class="mono" readonly value="…">
-      <div class="btn-row">
-        <button type="button" class="secondary" id="api-copy-btn">Copy</button>
-        <button type="button" class="secondary" id="api-regen-btn">Regenerate</button>
-      </div>
-      <div class="muted small">Regenerating revokes the old token; you must update it in Home Assistant.</div>
-      <div class="msg" id="api-msg"></div>
-    </section>
-    </div><!-- /settings tab -->
-  </div>
-</main>
-
-<div id="modal" class="modal" hidden>
-  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modal-text">
-    <p id="modal-text"></p>
-    <div class="modal-actions">
-      <button type="button" class="secondary" id="modal-cancel">Cancel</button>
-      <button type="button" id="modal-ok">Confirm</button>
-    </div>
-  </div>
+<!-- SVS -->
+<section data-view="svs" class="grid3" hidden>
+<div class="panel">
+<div class="row"><h2 class="grow">Active input</h2><span class="dot" id="v-dot"></span><span class="small" id="v-state">–</span></div>
+<div class="svs-now"><span id="v-input">–</span><span id="v-sub" class="small"></span></div>
+<div class="kv"><span>Firmware</span><span id="svs-fw">–</span><span>Inputs</span><span id="svs-inputs">–</span></div>
 </div>
 
+<div class="panel span2">
+<div class="row"><h2 class="grow">Inputs</h2><span class="small" id="v-total"></span></div>
+<div class="svs-grid" id="v-grid" hidden></div>
+<div class="small" id="v-nogrid">The inputs show up once the SVS says how many it has (it prints them when it starts).</div>
+<div class="small">The bridge reports the active input to Home Assistant, and to a Cruller on the same network.</div>
+</div>
+
+<div class="panel span2">
+<div class="row"><h2 class="grow">Serial log</h2><span class="small hide-sm">everything the SVS sends, and what the bridge sends it</span><button type="button" class="link" id="svs-log-clear">Clear</button></div>
+<div class="log" id="svs-log" role="log" aria-live="polite"></div>
+<form id="svs-send-form" class="row" autocomplete="off" hidden>
+<input type="text" id="svs-cmd" class="mono" maxlength="128" placeholder="Command, e.g. SVS_Input_Up" aria-label="Command to send to the SVS">
+<button type="submit" class="primary" id="svs-send-btn">Send</button>
+</form>
+<div class="msg" id="svs-send-msg"></div>
+</div>
+
+<div class="panel">
+<h2>Control</h2>
+<label class="switch" id="svs-send-label" hidden><input type="checkbox" id="svs-send-toggle"><span>Send commands to the SVS</span></label>
+<div class="note" id="svs-mode-hint"></div>
+<div class="grow"></div>
+<button id="svs-restart-btn" hidden>Restart SVS</button>
+<div class="msg" id="svs-restart-msg"></div>
+</div>
+
+<div class="panel span3" id="svs-fw-section" hidden>
+<div class="row"><h2 class="grow">SVS firmware</h2><span class="small" id="svs-fw-state"></span></div>
+<ol class="steps">
+<li id="svs-step1" data-state="run"><span class="si"></span><div class="sb">
+<div class="row" style="flex-wrap:wrap"><span class="st grow">Identify the bootloader</span><button id="svs-check-btn">Prepare update</button></div>
+<div class="small">The SVS restarts, so video drops for a moment. Nothing is written until you press Flash SVS.</div>
+<div id="svs-boot-row" class="stack" style="gap:4px" hidden><span class="small">Bootloader</span><span id="svs-boot" class="mono" style="font-size:13px;overflow-wrap:anywhere"></span></div>
+<div id="svs-vector" class="stack" hidden>
+<div class="small">This bootloader needs the reset vector patched when flashing. The preview checks, without writing anything, that the patch the bridge would write matches what the official tool already put on the chip. Required before flashing.</div>
+<div><button id="svs-preview-btn">Preview vector patch</button></div>
+</div>
+<div class="msg" id="svs-check-msg"></div>
+<div id="svs-probe" class="stack" hidden>
+<div class="small">Restarts the SVS a few times, listening and trying to reach its bootloader with other timings and speeds. Results go to the serial log. Nothing is written.</div>
+<div><button id="svs-probe-btn">Diagnose bootloader</button></div>
+</div>
+</div></li>
+<li id="svs-step2" data-state="wait"><span class="si"></span><div class="sb">
+<span class="st">Choose the firmware</span>
+<div id="svs-controls" class="stack" hidden>
+<div class="row" style="flex-wrap:wrap">
+<select id="svs-rel" class="grow" style="width:auto"><option value="">Official releases…</option></select>
+<button id="svs-file-btn">Or a .hex file…</button>
+<input type="file" id="svs-file" accept=".hex" hidden>
+</div>
+<div class="msg" id="svs-msg"></div>
+<div class="kv" id="svs-staged" hidden><span>Firmware</span><span id="svs-src"></span><span>Size</span><span id="svs-size"></span><span>SHA-256</span><span id="svs-sha" class="small"></span></div>
+</div>
+</div></li>
+<li id="svs-step3" data-state="wait"><span class="si"></span><div class="sb">
+<div class="row" style="flex-wrap:wrap"><span class="st grow">Flash</span><button class="primary danger" id="svs-flash-btn" disabled>Flash SVS</button></div>
+<div class="msg bad" id="svs-blocker"></div>
+<div class="msg" id="svs-flash-msg"></div>
+</div></li>
+</ol>
+</div>
+</section>
+
+<!-- Bridge -->
+<section data-view="bridge" class="grid3" hidden>
+<div class="panel">
+<h2>This bridge</h2>
+<div class="row" style="align-items:baseline"><span class="big" id="f-ver">–</span><span class="small" id="f-part"></span></div>
+<div class="kv"><span>Up for</span><span id="f-up">–</span><span>Last start</span><span id="f-boot">–</span><span>Built</span><span id="f-built">–</span></div>
+<div class="grow"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<button id="reboot-btn">Restart</button>
+<button class="danger" id="reset-btn">Factory reset</button>
+</div>
+<button id="logout-btn">Log out</button>
+<div class="msg" id="device-msg"></div>
+</div>
+
+<div class="panel">
+<h2>Wi-Fi</h2>
+<div class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:600" id="w-ssid">–</span><span class="small" id="w-rssi"></span></div>
+<div class="kv"><span>Address</span><span id="w-host">–</span><span>IP</span><span id="w-ip">–</span><span>State</span><span id="w-state">–</span></div>
+<div class="grow"></div>
+<button type="button" id="wifi-change">Change network</button>
+<form id="wifi-form" class="stack" autocomplete="off" hidden>
+<div class="row">
+<div class="combo">
+<input type="text" id="ssid" autocomplete="off" maxlength="32" placeholder="Choose or type a network" role="combobox" aria-controls="ssid-list" aria-autocomplete="list">
+<button type="button" class="combo-toggle" id="ssid-toggle" aria-label="Show networks"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+<ul class="combo-list" id="ssid-list" role="listbox" hidden></ul>
+</div>
+<button type="button" class="refresh" id="scan-btn" aria-label="Scan again" title="Scan again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+<input type="password" id="password" autocomplete="off" maxlength="63" placeholder="Password">
+<button type="submit" class="primary" id="wifi-btn">Connect</button>
+</form>
+<div class="msg" id="wifi-msg"></div>
+</div>
+
+<div class="panel">
+<h2>HTTPS certificate</h2>
+<div class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:600" id="st-tls">–</span></div>
+<div class="small">SHA-256 fingerprint</div>
+<div class="mono small" id="st-fp" style="overflow-wrap:anywhere;color:var(--soft)">–</div>
+<div class="small">Browsers warn about the self-signed certificate once. For scripts, download it and trust or pin it.</div>
+<div class="grow"></div>
+<a class="btn" href="/device/cert">Download certificate</a>
+</div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Bridge firmware</h2><span class="small" id="fw-state">–</span></div>
+<div class="upd">
+<div class="stack">
+<div class="row"><select id="fw-rel" class="grow"><option value="">Loading…</option></select><button class="refresh" id="fw-refresh" title="Check GitHub again" aria-label="Check GitHub again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></div>
+<button class="primary" id="fw-gh-btn" disabled>Download and install</button>
+<button id="fw-file-btn">Install from a file…</button>
+<input type="file" id="fw-file" accept=".bin" hidden>
+<div class="msg" id="fw-msg"></div>
+</div>
+<div class="stack">
+<div class="note">The bridge downloads the firmware straight from GitHub, checks it (ESP32-S3, project <span class="mono">svs_bridge</span>, checksum) and restarts into it. It keeps the new version only once it reconnects to the Wi-Fi; otherwise it goes back to the current one by itself.</div>
+<div class="kv"><span>Running</span><span id="fw-current">–</span><span>Release notes</span><span><a class="more" id="fw-notes" href="https://github.com/margaale/svs-bridge/releases" target="_blank" rel="noopener">github.com/margaale/svs-bridge</a></span></div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- Home Assistant -->
+<section data-view="ha" class="grid3" hidden>
+<div class="panel span2">
+<h2>API token</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">Home Assistant discovers the bridge on your network by itself. Paste this token when adding it, so it can read the SVS state.</div>
+<div class="row"><input type="password" id="api-token" class="mono" readonly value="…"><button type="button" id="api-copy-btn">Copy</button><button type="button" class="danger" id="api-regen-btn">Regenerate</button></div>
+<div class="small">Regenerating revokes the old token: update it in Home Assistant afterwards.</div>
+<div class="msg" id="api-msg"></div>
+</div>
+<div class="panel">
+<h2>Integration</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">The custom integration installs through HACS.</div>
+<a class="more" href="https://github.com/margaale/svs-bridge-hacs" target="_blank" rel="noopener">github.com/margaale/svs-bridge-hacs →</a>
+</div>
+<div class="panel span3">
+<h2>API</h2>
+<div class="kv"><span><span class="mono">GET /api/v1/info</span></span><span style="font-family:var(--sans);color:var(--soft)">id, name, model, firmware</span><span><span class="mono">GET /api/v1/state</span></span><span style="font-family:var(--sans);color:var(--soft)">SVS state and bridge diagnostics</span></div>
+<div class="small">Both take an <span class="mono">Authorization: Bearer &lt;token&gt;</span> header. The bridge advertises itself over mDNS as <span class="mono">_svsbridge._tcp</span>.</div>
+</div>
+</section>
+</main>
+
+<div id="busy" class="busy" hidden role="status" aria-live="polite">
+<div class="busy-box">
+<div class="ring" id="busy-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" class="track"/><circle cx="50" cy="50" r="44" class="arc" id="busy-arc"/></svg><span id="busy-num"></span><span id="busy-icon"></span></div>
+<h3 id="busy-title"></h3>
+<p id="busy-text"></p>
+<div id="busy-actions" class="row" style="justify-content:center"></div>
+</div>
+</div>
+<dialog id="ask" aria-labelledby="ask-title">
+<form method="dialog">
+<h3 id="ask-title"></h3>
+<p id="ask-text"></p>
+<div class="row" style="justify-content:flex-end"><button value="no" id="ask-no">Cancel</button><button value="yes" id="ask-yes" class="primary">OK</button></div>
+</form>
+</dialog>
+
 <script>
+'use strict';
 const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const LOCK = '<svg class="lock" viewBox="0 0 16 16" aria-label="secured"><path fill="currentColor" ' +
+const text = (id, t) => { $(id).textContent = t; };
+const LOCK = '<svg class="lock" viewBox="0 0 16 16" width="12" height="12" aria-label="secured"><path fill="currentColor" ' +
   'd="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2 6H6V4.5a2 2 0 1 1 4 0V7z"/></svg>';
 let status = null;
 let svs = null;
@@ -423,26 +367,14 @@ function addPasswordToggles() {
 }
 addPasswordToggles();
 
-// Shows the chosen file name next to a styled file picker. Call it after
-// clearing an input from code too, as that fires no change event.
-function showFileName(input) {
-  const name = input.parentElement.querySelector('.file-name');
-  const file = input.files[0];
-  name.textContent = file ? file.name : 'No file chosen';
-  name.classList.toggle('chosen', !!file);
-}
-for (const input of document.querySelectorAll('.file-input')) {
-  input.addEventListener('change', () => showFileName(input));
-}
-
-function setMsg(el, text, cls) {
-  el.textContent = text;
+function setMsg(el, t, cls) {
+  el.textContent = t;
   el.className = 'msg ' + (cls || '');
 }
 
-function esc(text) {
+function esc(t) {
   const d = document.createElement('div');
-  d.textContent = text;
+  d.textContent = t;
   return d.innerHTML;
 }
 
@@ -450,9 +382,9 @@ function esc(text) {
 // means the session is gone (e.g. after a reboot): back to the login form.
 async function api(path, options) {
   const res = await fetch(path, options);
-  const text = await res.text();
+  const body_ = await res.text();
   let body;
-  try { body = JSON.parse(text); } catch (e) { body = {error: text}; }
+  try { body = JSON.parse(body_); } catch (e) { body = {error: body_}; }
   if (!res.ok) {
     if (res.status === 401 && path !== '/device/login') showAuth('login');
     const err = new Error(body.error || res.statusText);
@@ -471,43 +403,87 @@ function post(path, data) {
   });
 }
 
-// Custom confirm dialog: native confirm() does not work inside the app's
-// browser pane. Returns a promise that resolves true (confirm) or false.
-function confirmModal(text, opts = {}) {
-  const modal = $('modal'), ok = $('modal-ok'), cancel = $('modal-cancel');
-  $('modal-text').textContent = text;
-  ok.textContent = opts.okText || 'Confirm';
-  ok.className = opts.danger ? 'danger' : '';
-  modal.hidden = false;
-  ok.focus();
-  return new Promise((resolve) => {
-    const done = (val) => {
-      modal.hidden = true;
-      ok.onclick = cancel.onclick = modal.onclick = null;
-      document.removeEventListener('keydown', onKey);
-      resolve(val);
-    };
-    const onKey = (e) => {
-      if (e.key === 'Escape') done(false);
-      else if (e.key === 'Enter') done(true);
-    };
-    ok.onclick = () => done(true);
-    cancel.onclick = () => done(false);
-    modal.onclick = (e) => { if (e.target === modal) done(false); };  // click outside
-    document.addEventListener('keydown', onKey);
-  });
+// A confirmation in the page's own style (native confirm() does not work in
+// the app's browser pane): resolves true on OK.
+function askUser(title, body, ok, danger) {
+  const d = $('ask');
+  text('ask-title', title);
+  text('ask-text', body || '');
+  text('ask-yes', ok || 'OK');
+  $('ask-yes').className = 'primary' + (danger ? ' danger' : '');
+  d.returnValue = '';
+  d.showModal();
+  $('ask-no').focus();
+  return new Promise((resolve) => d.addEventListener('close', () => resolve(d.returnValue === 'yes'), {once: true}));
 }
 
-// --- Login ------------------------------------------------------------------
+// A full-page overlay for long operations: a ring that spins (waiting), fills
+// (progress, frac 0..1), or shows how it ended (ok / bad), with a title, a
+// line of text and optional buttons.
+const ARC = 276.5;  // the ring's circumference (r = 44)
+
+function busy(o) {
+  const ring = $('busy-ring'), arc = $('busy-arc');
+  $('busy').hidden = false;
+  text('busy-title', o.title || '');
+  text('busy-text', o.text || '');
+  ring.className = 'ring' + (o.mode === 'spin' ? ' spin' : o.mode === 'ok' ? ' ok' : o.mode === 'bad' ? ' bad' : '');
+  text('busy-num', '');
+  text('busy-icon', o.mode === 'ok' ? '✓' : o.mode === 'bad' ? '!' : '');
+  arc.style.strokeDashoffset = '';
+  if (o.mode === 'progress') {
+    const f = Math.min(1, Math.max(0, o.frac || 0));
+    arc.style.strokeDashoffset = ARC * (1 - f);
+    text('busy-num', Math.round(100 * f) + '%');
+  }
+  const acts = $('busy-actions');
+  acts.textContent = '';
+  for (const a of o.actions || []) {
+    const b = a.href ? document.createElement('a') : document.createElement('button');
+    b.textContent = a.label;
+    b.className = (a.href ? 'btn ' : '') + (a.primary ? 'primary' : '');
+    if (a.href) b.href = a.href;
+    if (a.onclick) b.onclick = a.onclick;
+    acts.appendChild(b);
+  }
+}
+
+function busyHide() { $('busy').hidden = true; }
+const closeAction = {label: 'Close', onclick: busyHide};
+
+function duration(seconds) {
+  const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24;
+  const m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : m ? `${m} min ${s} s` : `${s} s`;
+}
+
+// --- Sign-in and tabs -------------------------------------------------------
+
+let signedIn = false;
 
 function showAuth(view) {
-  const wasApp = !$('app').hidden;
+  const wasIn = signedIn;
+  signedIn = view === 'app';
+  document.body.classList.toggle('auth', !signedIn);
   $('create').hidden = view !== 'create';
   $('login').hidden = view !== 'login';
-  $('app').hidden = view !== 'app';
-  if (view === 'login' && wasApp) $('login-pw').focus();
-  if (view === 'app') { restoreTab(); refresh(); refreshSvs(); startLog(); loadApiToken(); }
+  if (view === 'login' && wasIn) $('login-pw').focus();
+  route();
+  if (signedIn) { refresh(); refreshSvs(); startLog(); loadApiToken(); }
 }
+
+let tab = 'svs';
+
+function route() {
+  const t = location.hash.slice(1);
+  tab = ['svs', 'bridge', 'ha'].includes(t) ? t : 'svs';
+  for (const e of document.querySelectorAll('[data-view]')) e.hidden = !signedIn || e.dataset.view !== tab;
+  for (const a of document.querySelectorAll('nav.tabs a')) a.toggleAttribute('aria-current', a.dataset.tab === tab);
+  $('chip-svs').hidden = tab !== 'svs' && tab !== 'ha';
+  $('chip-wifi').hidden = $('chip-ver').hidden = !$('chip-svs').hidden;
+  if (signedIn && tab === 'bridge') fwLoadReleases();
+}
+addEventListener('hashchange', route);
 
 // --- Home Assistant API token ----------------------------------------------
 
@@ -531,8 +507,8 @@ $('api-copy-btn').onclick = async () => {
 };
 
 $('api-regen-btn').onclick = async () => {
-  if (!await confirmModal('Regenerate the API token? Home Assistant will stop working until you update it.',
-                          {danger: true, okText: 'Regenerate'})) return;
+  if (!await askUser('Regenerate the API token?', 'Home Assistant stops reading the bridge until you give it the new one.',
+                     'Regenerate', true)) return;
   try {
     $('api-token').value = (await post('/device/api-token/regenerate')).token;
     setMsg($('api-msg'), 'New token generated. Update it in Home Assistant.', 'ok');
@@ -563,9 +539,9 @@ $('login-form').onsubmit = async (e) => {
     setMsg($('login-msg'), '');
     showAuth('app');
   } catch (err) {
-    const text = err.status === 429
+    const t = err.status === 429
       ? `Too many attempts. Try again in ${err.retryAfter} s.` : err.message;
-    setMsg($('login-msg'), text, 'bad');
+    setMsg($('login-msg'), t, 'bad');
   }
 };
 
@@ -576,26 +552,35 @@ $('logout-btn').onclick = async () => {
 
 // --- Bridge status ----------------------------------------------------------
 
+let statusAt = 0;
+
 function render(s) {
   status = s;
-  $('version').textContent = 'v' + s.firmware.version;
-  const w = s.wifi;
-  $('st-wifi').innerHTML = w.connected
-    ? `<span class="ok">Connected</span> to ${esc(w.ssid)} · ${w.ip} · ${w.rssi} dBm`
-    : `<span class="bad">Not connected</span>` + (w.ssid ? ` (trying ${esc(w.ssid)})` : '');
-  $('st-fw').textContent = `${s.firmware.version} · ${s.firmware.partition} · built ${s.firmware.built}`;
-  $('fw-current').textContent = `${s.firmware.project} ${s.firmware.version}`;
-  $('st-up').textContent = `${duration(s.firmware.uptime_s)} · last start: ${s.firmware.reset_reason}`;
-  $('st-up').className = /crash|watchdog|brownout|glitch|lockup/.test(s.firmware.reset_reason) ? 'bad' : '';
-  $('st-tls').textContent = s.tls.source === 'custom' ? 'Custom' : 'Self-signed';
-  $('st-fp').textContent = 'SHA-256 ' + s.tls.fingerprint;
+  statusAt = Date.now();
+  const w = s.wifi, fw = s.firmware;
+  text('chip-ver', 'v' + fw.version);
+  text('wifi-chip', w.connected ? w.ssid + ' · ' + w.rssi + ' dBm' : 'Wi-Fi not connected');
+  text('w-ssid', w.ssid || '–');
+  text('w-rssi', w.connected ? w.rssi + ' dBm' : '');
+  text('w-host', w.hostname);
+  text('w-ip', w.connected ? w.ip : '–');
+  $('w-state').innerHTML = w.connected ? '<span class="ok">connected</span>'
+    : '<span class="bad">' + (w.ssid ? 'trying to connect' : 'not connected') + '</span>';
+  text('f-ver', fw.version);
+  text('f-part', 'partition ' + fw.partition);
+  text('f-built', fw.built);
+  text('f-boot', fw.reset_reason);
+  $('f-boot').className = /crash|watchdog|brownout|glitch|lockup/.test(fw.reset_reason) ? 'bad' : '';
+  text('fw-current', `${fw.project} ${fw.version}`);
+  text('st-tls', s.tls.source === 'custom' ? 'Custom' : 'Self-signed');
+  text('st-fp', s.tls.fingerprint);
+  showUptime();
 }
 
-function duration(seconds) {
-  const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24;
-  const m = Math.floor(seconds / 60) % 60, s = seconds % 60;
-  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : m ? `${m} min ${s} s` : `${s} s`;
+function showUptime() {
+  if (status) text('f-up', duration(status.firmware.uptime_s + Math.floor((Date.now() - statusAt) / 1000)));
 }
+setInterval(showUptime, 1000);
 
 async function refresh() {
   try { render(await api('/api/status')); } catch (e) { /* device busy or rebooting */ }
@@ -605,108 +590,133 @@ async function refresh() {
 
 function renderSvs(s) {
   svs = s;
-  $('svs-conn').innerHTML = s.connected
-    ? '<span class="ok">Connected</span>' : '<span class="bad">Not connected</span>';
   // Only ever what a connected SVS has reported (there is no command to ask for
-  // it); nothing is kept once the SVS is unplugged.
-  const dash = '<span class="muted">—</span>';
-  const unknown = '<span class="muted">Unknown until the SVS restarts</span>';
-  $('svs-fw').innerHTML = !s.connected ? dash
-    : s.firmware ? esc(s.firmware.replace(/^SVS_FW_/, '')) : unknown;
-  // Input 0 is the SVS's "no input selected"
-  const current = s.current_input == null ? '?' : s.current_input === 0 ? '0 (none)' : s.current_input;
-  $('svs-inputs').innerHTML = !s.connected ? dash
-    : s.total_inputs != null ? `${s.total_inputs} (current: ${current})` : unknown;
-  $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
+  // it); nothing is kept once the SVS is unplugged. Input 0 is "no input".
+  const known = s.connected && s.current_input != null;
+  const input = !known ? '–' : s.current_input === 0 ? '0' : String(s.current_input);
+  text('svs-chip', !s.connected ? 'SVS not connected' : 'SVS · ' + (!known ? 'input unknown' : s.current_input === 0 ? 'no input' : 'input ' + input));
+  $('svs-dot').className = 'dot ' + (!s.connected ? 'bad' : known ? 'ok' : 'warn');
+  $('v-dot').className = $('svs-dot').className;
+  text('v-state', !s.connected ? 'not connected' : known ? 'live' : 'waiting for the SVS');
+  text('v-input', input);
+  text('v-sub', !s.connected ? 'plug the SVS into the bridge' : !known ? 'reported when the input changes'
+    : s.current_input === 0 ? 'no input selected' : s.total_inputs ? 'of ' + s.total_inputs + ' inputs' : '');
+  const unknown = 'unknown until it restarts';
+  text('svs-fw', !s.connected ? '–' : s.firmware ? s.firmware.replace(/^SVS_FW_/, '') : unknown);
+  text('svs-inputs', !s.connected ? '–' : s.total_inputs != null ? s.total_inputs : unknown);
+
+  // One tile per input, the active one lit: only once the SVS has said how many it has
+  const total = s.connected && s.total_inputs ? s.total_inputs : 0;
+  text('v-total', total ? total + ' inputs' : '');
+  $('v-grid').hidden = !total;
+  $('v-nogrid').hidden = !!total;
+  $('v-grid').innerHTML = Array.from({length: total}, (_, i) => {
+    const on = s.current_input === i + 1;
+    return '<div class="' + (on ? 'on' : '') + '">' + (i + 1) + '<small>' + (on ? 'ACTIVE' : 'INPUT ' + (i + 1)) + '</small></div>';
+  }).join('');
 
   // Send vs. listen-only mode. The whole mode UI only makes sense with an SVS
   // attached, so it is hidden until one is connected.
   const send = s.send_enabled;
   $('svs-send-toggle').checked = send;
   $('svs-send-label').hidden = !s.connected;
-  $('svs-mode-hint').hidden = !s.connected;
-  $('svs-mode-hint').textContent = send
-    ? "The bridge can send commands and update the SVS firmware. Keep the RetroTINK's HD-15 "
-      + "disconnected while sending — the SVS shares that line."
-    : "The bridge only listens to the SVS (its active input). Turn this on to send commands or "
-      + "update firmware; disconnect the RetroTINK's HD-15 first.";
+  $('svs-mode-hint').className = 'note' + (send ? ' warn' : '');
+  text('svs-mode-hint', !s.connected
+    ? 'Plug the SVS into the bridge\'s USB port.'
+    : send
+      ? 'The bridge can send commands and update the SVS firmware. Keep the RetroTINK\'s HD-15 '
+        + 'disconnected while sending: the SVS shares that line.'
+      : 'The bridge only listens to the SVS (its active input), so the RetroTINK\'s HD-15 can stay connected. '
+        + 'Turn this on to send commands or update the firmware; disconnect the HD-15 first.');
   $('svs-restart-btn').hidden = !send || !s.connected;
+  $('svs-restart-btn').disabled = s.update.task !== 'idle';
   $('svs-send-form').hidden = !send || !s.connected;
   $('svs-fw-section').hidden = !send || !s.connected;
 
   const u = s.update;
   const d = u.device;
-  const busy = u.task !== 'idle';
+  const busyTask = u.task !== 'idle';
   const flashing = u.task === 'flashing';
 
   // Step 1: identify the bootloader
-  $('svs-check-btn').disabled = busy || svsStaging || !s.connected;
+  $('svs-check-btn').disabled = busyTask || svsStaging || !s.connected;
+  $('svs-check-btn').textContent = d.checked ? 'Check again' : 'Prepare update';
   $('svs-boot-row').hidden = !d.checked;
   let bootStatus;
   if (!d.compatible) {
     bootStatus = `<span class="bad">${esc(d.problem)}</span>`;
   } else if (d.vector && !d.vector_verified) {
-    bootStatus = '<span class="warn">Vector bootloader — preview required before flashing</span>';
+    bootStatus = '<span class="warn">Vector bootloader: preview required before flashing</span>';
   } else if (d.vector) {
-    bootStatus = '<span class="ok">Vector patch verified — safe to flash</span>';
+    bootStatus = '<span class="ok">Vector patch verified: safe to flash</span>';
   } else {
     bootStatus = '<span class="ok">Can be updated</span>';
   }
   $('svs-boot').innerHTML = `${esc(d.summary)}<br>` + bootStatus;
+  const step1Done = d.checked && d.compatible && (!d.vector || d.vector_verified);
+  const step1 = ['checking', 'probing', 'previewing'].includes(u.task) ? 'run'
+    : d.checked && !d.compatible ? 'fail' : step1Done ? 'done' : 'run';
+  $('svs-step1').dataset.state = step1;
 
   // Vector patch preview (only for a compatible vector bootloader)
   $('svs-vector').hidden = !(d.checked && d.compatible && d.vector);
-  $('svs-preview-btn').disabled = busy || !s.connected;
+  $('svs-preview-btn').disabled = busyTask || !s.connected;
   $('svs-preview-btn').textContent = d.vector_verified ? 'Re-check vector patch' : 'Preview vector patch';
 
   // Diagnostics: offered when the bootloader did not answer
   const noAnswer = u.result_of === 'checking' && !u.result_ok && !d.checked;
   $('svs-probe').hidden = !(noAnswer || u.task === 'probing' || u.result_of === 'probing');
-  $('svs-probe-btn').disabled = busy || !s.connected;
-  if (!s.connected && !busy) {
-    setMsg($('svs-check-msg'), 'The SVS is not connected', 'bad');
-  } else if (u.task === 'checking' || u.task === 'probing' || u.task === 'previewing') {
+  $('svs-probe-btn').disabled = busyTask || !s.connected;
+  if (u.task === 'checking' || u.task === 'probing' || u.task === 'previewing') {
     setMsg($('svs-check-msg'), u.phase + '…');
   } else if (u.result_of === 'probing') {
-    setMsg($('svs-check-msg'), u.result, 'muted');
+    setMsg($('svs-check-msg'), u.result, '');
   } else if (u.result_of === 'previewing') {
     setMsg($('svs-check-msg'), u.result, u.result_ok ? 'ok' : 'bad');
-  } else if (u.result_of === 'checking' && !u.result_ok && !d.checked) {
-    setMsg($('svs-check-msg'), u.result, 'bad');  // no answer from the bootloader
+  } else if (noAnswer) {
+    setMsg($('svs-check-msg'), u.result, 'bad');
   } else if (u.result_of === 'checking') {
-    setMsg($('svs-check-msg'), d.compatible ? u.result : '', 'muted');
+    setMsg($('svs-check-msg'), d.compatible ? u.result : '', '');
   } else {
     setMsg($('svs-check-msg'), '');
   }
 
   // Step 2: choose (only for an identified, compatible SVS)
   $('svs-controls').hidden = !(d.checked && d.compatible);
-  for (const id of ['svs-rel', 'svs-file']) $(id).disabled = busy || svsStaging;
-
-  // While a new choice is being downloaded and checked, nothing is flashable
+  $('svs-rel').disabled = $('svs-file-btn').disabled = busyTask || svsStaging;
   const img = u.image;
   $('svs-staged').hidden = !img.staged || svsStaging;
-  $('svs-src').textContent = img.source;
-  $('svs-size').textContent = `${img.size.toLocaleString()} of ${d.app_space.toLocaleString()} bytes`;
-  $('svs-sha').textContent = img.sha256;
+  text('svs-src', img.source);
+  text('svs-size', `${img.size.toLocaleString()} of ${d.app_space.toLocaleString()} bytes`);
+  text('svs-sha', img.sha256);
+  $('svs-step2').dataset.state = svsStaging ? 'run' : img.staged ? 'done' : d.checked && d.compatible ? 'run' : 'wait';
 
   // Step 3: flash
   $('svs-flash-btn').disabled = !u.can_flash || svsStaging;
-  $('svs-blocker').textContent = !busy && img.staged && !u.can_flash ? u.blocker : '';
-  const bar = $('svs-progress');
-  bar.hidden = !flashing;
-  bar.value = u.progress;
+  text('svs-blocker', !busyTask && img.staged && !u.can_flash ? u.blocker : '');
+  $('svs-step3').dataset.state = flashing ? 'run' : u.result_of === 'flashing' ? (u.result_ok ? 'done' : 'fail')
+    : u.can_flash ? 'run' : 'wait';
+  if (u.result_of === 'flashing' && !flashing) setMsg($('svs-flash-msg'), u.result, u.result_ok ? 'ok' : 'bad');
+  else setMsg($('svs-flash-msg'), '');
+  text('svs-fw-state', busyTask ? u.phase + '…' : '');
+
+  // The flash itself: over the whole page, as nothing else may be done meanwhile
   if (flashing) {
-    setMsg($('svs-msg'), `${u.phase}… do not unplug the SVS or the bridge.`);
-  } else if (u.result_of === 'flashing') {
-    setMsg($('svs-msg'), u.result, u.result_ok ? 'ok' : 'bad');
+    svsFlashSeen = true;
+    busy({mode: 'progress', frac: u.progress / 100, title: 'Flashing the SVS',
+          text: u.phase + '…\nDo not unplug the SVS or the bridge.'});
+  } else if (svsFlashSeen && u.result_of === 'flashing') {
+    svsFlashSeen = false;
+    busy({mode: u.result_ok ? 'ok' : 'bad', title: u.result_ok ? 'SVS updated' : 'The flash failed',
+          text: u.result, actions: [closeAction]});
   }
 }
+let svsFlashSeen = false;
 
 let svsTimer = null;
 async function refreshSvs() {
   clearTimeout(svsTimer);
-  if ($('app').hidden) return;
+  if (!signedIn) return;
   try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
   // Poll faster while checking or flashing
   svsTimer = setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
@@ -725,7 +735,7 @@ function logTime(uptimeMs, nowMs) {
 
 async function pollLog() {
   clearTimeout(logTimer);
-  if ($('app').hidden) return;
+  if (!signedIn) return;
   let batchFull = false;
   try {
     const r = await api(`/device/svs/log?after=${logAfter}`);
@@ -744,7 +754,7 @@ async function pollLog() {
       logAfter = e.seq;
     }
     while (box.childElementCount > 500) box.firstElementChild.remove();
-    if (atBottom) box.scrollTop = box.scrollHeight;
+    if (atBottom || box.offsetParent === null) box.scrollTop = box.scrollHeight;
     batchFull = r.entries.length >= 100;  // more waiting: fetch again right away
   } catch (e) { /* busy, restarting or logged out */ }
   logTimer = setTimeout(pollLog, batchFull ? 0 : 1000);
@@ -779,13 +789,15 @@ $('svs-send-form').onsubmit = async (e) => {
 
 $('svs-send-toggle').onchange = async (e) => {
   const on = e.target.checked;
-  if (on && !await confirmModal('Allow the bridge to send commands and flash the SVS?\n\n' +
-                     "Disconnect the RetroTINK's HD-15 before sending — the SVS shares that " +
-                     'line and will not respond otherwise.')) {
+  if (on && !await askUser('Send commands to the SVS?',
+                           'This allows the bridge to send commands and flash the SVS.\n\n' +
+                           'Disconnect the RetroTINK\'s HD-15 first: the SVS shares that line and will not respond otherwise.',
+                           'Allow sending')) {
     e.target.checked = false;
     return;
   }
   try {
+    setMsg($('svs-restart-msg'), '');
     renderSvs(await post('/device/svs/mode', {send: on}));
   } catch (err) {
     setMsg($('svs-restart-msg'), err.message, 'bad');
@@ -794,7 +806,7 @@ $('svs-send-toggle').onchange = async (e) => {
 };
 
 $('svs-restart-btn').onclick = async () => {
-  if (!await confirmModal('Restart the SVS? Video drops for a moment.')) return;
+  if (!await askUser('Restart the SVS?', 'Video drops for a moment.', 'Restart')) return;
   const msg = $('svs-restart-msg');
   try {
     await post('/device/svs/restart');
@@ -805,80 +817,61 @@ $('svs-restart-btn').onclick = async () => {
   }
 };
 
-$('svs-preview-btn').onclick = async () => {
-  if (!await confirmModal('Preview the vector patch? The SVS restarts (video drops for a moment). ' +
-               'Nothing is written.')) return;
+async function svsTask(title, body, ok, path) {
+  if (!await askUser(title, body, ok)) return;
   try {
-    renderSvs(await post('/device/svs/preview'));
+    renderSvs(await post(path));
     refreshSvs();
   } catch (e) {
     setMsg($('svs-check-msg'), e.message, 'bad');
   }
-};
+}
 
-$('svs-probe-btn').onclick = async () => {
-  if (!await confirmModal('Run the bootloader diagnostics? The SVS restarts a few times over about ' +
-               '15 seconds. Nothing is written.')) return;
-  try {
-    renderSvs(await post('/device/svs/probe'));
-    refreshSvs();
-  } catch (e) {
-    setMsg($('svs-check-msg'), e.message, 'bad');
-  }
-};
+$('svs-check-btn').onclick = () => svsTask('Identify the SVS bootloader?',
+  'The SVS restarts, so video drops for a moment. Nothing is written yet.', 'Restart and check', '/device/svs/check');
+$('svs-preview-btn').onclick = () => svsTask('Preview the vector patch?',
+  'The SVS restarts (video drops for a moment). Nothing is written.', 'Preview', '/device/svs/preview');
+$('svs-probe-btn').onclick = () => svsTask('Run the bootloader diagnostics?',
+  'The SVS restarts a few times over about 15 seconds. Nothing is written.', 'Run diagnostics', '/device/svs/probe');
 
-$('svs-check-btn').onclick = async () => {
-  if (!await confirmModal('Restart the SVS to identify its bootloader? Video drops for a moment. ' +
-               'Nothing is written yet.')) return;
-  try {
-    renderSvs(await post('/device/svs/check'));
-    refreshSvs();
-  } catch (e) {
-    setMsg($('svs-check-msg'), e.message, 'bad');
-  }
-};
+// The official releases are checked when the menu is opened (the bridge caches
+// them for a minute, as GitHub limits how often it may be asked)
+let svsReleasesAt = 0;
 
-// The releases are checked when the menu is opened (the bridge caches them
-// for a minute, as GitHub limits how often it may be asked)
-let releasesCheckedAt = 0;
-
-async function loadReleases() {
+async function svsLoadReleases() {
   const sel = $('svs-rel');
   const chosen = sel.value;
   sel.innerHTML = '<option value="">Checking releases…</option>';
   try {
     const releases = await api('/device/svs/releases');
-    releasesCheckedAt = Date.now();
-    sel.innerHTML = '<option value="">Choose a version…</option>';
+    svsReleasesAt = Date.now();
+    sel.innerHTML = '<option value="">Official releases…</option>';
     const latest = releases.find((r) => !r.beta);
     for (const r of releases) {
       const opt = document.createElement('option');
       opt.value = r.name;
-      opt.textContent = r.version + (r === latest ? ' (latest)' : '');
+      opt.textContent = r.version + (r === latest ? ' (latest)' : '') + (r.beta ? ' · beta' : '');
       sel.appendChild(opt);
     }
     if (!releases.length) sel.innerHTML = '<option value="">No releases found</option>';
     sel.value = releases.some((r) => r.name === chosen) ? chosen : '';
   } catch (e) {
     sel.innerHTML = '<option value="">Could not check releases</option>';
-    if (e.status !== 401) setMsg($('svs-msg'), 'Could not check official releases: ' + e.message, 'bad');
+    if (e.status !== 401) setMsg($('svs-msg'), 'Could not check the official releases: ' + e.message, 'bad');
   }
 }
 
-function releasesStale() {
-  return Date.now() - releasesCheckedAt > 60000;
-}
+const svsReleasesStale = () => Date.now() - svsReleasesAt > 60000;
 
 // Mouse: hold the menu until the list is in, then open it
 $('svs-rel').addEventListener('mousedown', async (e) => {
-  if (!releasesStale()) return;
+  if (!svsReleasesStale()) return;
   e.preventDefault();
-  await loadReleases();
+  await svsLoadReleases();
   try { $('svs-rel').showPicker(); } catch (err) { $('svs-rel').focus(); }
 });
-
 // Keyboard: refresh when the menu gets focus
-$('svs-rel').addEventListener('focus', () => { if (releasesStale()) loadReleases(); });
+$('svs-rel').addEventListener('focus', () => { if (svsReleasesStale()) svsLoadReleases(); });
 
 // Stages a firmware on the bridge. The details and Flash SVS only show up once
 // the bridge has checked it; on failure nothing stays staged.
@@ -901,14 +894,14 @@ async function stageSvsFirmware(label, request) {
 $('svs-rel').onchange = () => {
   const name = $('svs-rel').value;
   if (!name) return;
-  $('svs-file').value = '';
-  showFileName($('svs-file'));
   stageSvsFirmware(`Downloading and checking ${name}…`,
                    () => post('/device/svs/firmware/official', {name}));
 };
 
+$('svs-file-btn').onclick = () => $('svs-file').click();
 $('svs-file').onchange = async () => {
   const file = $('svs-file').files[0];
+  $('svs-file').value = '';
   if (!file) return;
   $('svs-rel').value = '';
   const body = await file.text();
@@ -921,18 +914,17 @@ $('svs-file').onchange = async () => {
 
 $('svs-flash-btn').onclick = async () => {
   const img = svs.update.image;
-  if (!await confirmModal(`Flash ${img.source} to the SVS?\n\nSHA-256 ${img.sha256}\n\n` +
-               'Do not unplug the SVS or the bridge until it finishes.',
-               {danger: true, okText: 'Flash SVS'})) return;
+  if (!await askUser(`Flash ${img.source}?`, `SHA-256 ${img.sha256}\n\n` +
+                     'Do not unplug the SVS or the bridge until it finishes.', 'Flash SVS', true)) return;
   try {
     renderSvs(await post('/device/svs/firmware/flash'));
     refreshSvs();
   } catch (e) {
-    setMsg($('svs-msg'), e.message, 'bad');
+    setMsg($('svs-flash-msg'), e.message, 'bad');
   }
 };
 
-// --- WiFi -------------------------------------------------------------------
+// --- Wi-Fi ------------------------------------------------------------------
 
 function signalBars(rssi) {
   const level = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
@@ -952,7 +944,7 @@ function networkCombo(onPick) {
   const input = $('ssid'), list = $('ssid-list'), scanBtn = $('scan-btn');
   let nets = null, scanning = false, active = -1, shown = [];
 
-  function render() {
+  function draw() {
     list.innerHTML = '';
     if (scanning && !nets) {
       list.innerHTML = '<li class="note">Scanning…</li>';
@@ -978,7 +970,7 @@ function networkCombo(onPick) {
     scanning = true;
     scanBtn.disabled = true;
     scanBtn.classList.add('spin');
-    render();
+    draw();
     try {
       nets = await api('/device/scan');
     } catch (e) {
@@ -989,12 +981,12 @@ function networkCombo(onPick) {
     scanBtn.disabled = false;
     scanBtn.classList.remove('spin');
     active = -1;
-    if (!list.hidden) render();
+    if (!list.hidden) draw();
   }
 
   function open() {
     list.hidden = false;
-    if (!nets && !scanning) scan(); else render();
+    if (!nets && !scanning) scan(); else draw();
   }
   function close() { list.hidden = true; active = -1; }
   function pick(n) { input.value = n.ssid; close(); onPick(n); }
@@ -1003,16 +995,16 @@ function networkCombo(onPick) {
   list.addEventListener('mousedown', (e) => e.preventDefault());
   input.addEventListener('focus', open);
   input.addEventListener('blur', close);
-  input.addEventListener('input', () => { active = -1; list.hidden = false; render(); });
+  input.addEventListener('input', () => { active = -1; list.hidden = false; draw(); });
   input.addEventListener('keydown', (e) => {
     if (e.key === 'ArrowDown') {
       if (list.hidden) { open(); return; }
       active = Math.min(active + 1, shown.length - 1);
-      render();
+      draw();
       e.preventDefault();
     } else if (e.key === 'ArrowUp') {
       active = Math.max(active - 1, 0);
-      render();
+      draw();
       e.preventDefault();
     } else if (e.key === 'Enter' && !list.hidden && active >= 0) {
       pick(shown[active]);
@@ -1032,6 +1024,13 @@ function networkCombo(onPick) {
 
 networkCombo(() => $('password').focus());
 
+$('wifi-change').onclick = () => {
+  const form = $('wifi-form');
+  form.hidden = !form.hidden;
+  $('wifi-change').textContent = form.hidden ? 'Change network' : 'Cancel';
+  if (!form.hidden) $('ssid').focus();
+};
+
 $('wifi-form').onsubmit = async (e) => {
   e.preventDefault();
   const ssid = $('ssid').value.trim();
@@ -1047,14 +1046,14 @@ $('wifi-form').onsubmit = async (e) => {
       await refresh();
       if (status && status.wifi.connected && status.wifi.ssid === ssid) {
         setMsg(msg, `Connected (${status.wifi.ip}). Open https://${status.wifi.hostname} ` +
-                    'from your home network.', 'ok');
+                    'from that network.', 'ok');
         $('wifi-btn').disabled = false;
         return;
       }
     }
     setMsg(msg, 'Could not connect. Check the password and try again.', 'bad');
-  } catch (e) {
-    setMsg(msg, 'Error: ' + e.message, 'bad');
+  } catch (err) {
+    setMsg(msg, 'Error: ' + err.message, 'bad');
   }
   $('wifi-btn').disabled = false;
 };
@@ -1096,232 +1095,199 @@ async function readAppImage(file) {
   return app;
 }
 
-let fwImage = null;
+$('fw-file-btn').onclick = () => $('fw-file').click();
 
 $('fw-file').onchange = async () => {
   const file = $('fw-file').files[0];
-  fwImage = null;
-  $('fw-staged').hidden = true;
+  $('fw-file').value = '';
   setMsg($('fw-msg'), '');
   if (!file) return;
+  let img;
   try {
-    fwImage = await readAppImage(file);
+    img = await readAppImage(file);
   } catch (e) {
-    setMsg($('fw-msg'), e.message, 'bad');
+    setMsg($('fw-msg'), file.name + ': ' + e.message, 'bad');
     return;
   }
   const current = status ? status.firmware.version : '?';
-  $('fw-version').textContent = `${fwImage.project} ${fwImage.version} (running ${current})`;
-  $('fw-built').textContent = `${fwImage.date} ${fwImage.time} · ESP-IDF ${fwImage.idf}`;
-  $('fw-size').textContent = fwImage.size.toLocaleString() + ' bytes';
-  $('fw-sha').textContent = fwImage.sha256;
-  $('fw-btn').disabled = false;
-  $('fw-staged').hidden = false;
+  if (!await askUser(`Install ${img.project} ${img.version}?`,
+                     `Running ${current} now.\n\nBuilt ${img.date} ${img.time} · ESP-IDF ${img.idf}\n` +
+                     `${img.size.toLocaleString()} bytes\nSHA-256 ${img.sha256}\n\n` +
+                     'The bridge restarts into it, and goes back to the current version if it fails to start.',
+                     'Install', true)) return;
+  uploadFirmware(file, img.version);
 };
 
-$('fw-btn').onclick = async () => {
-  const file = $('fw-file').files[0];
-  if (!file || !fwImage) return;
-  if (!await confirmModal(`Update the bridge to ${fwImage.project} ${fwImage.version}?`,
-               {danger: true, okText: 'Update bridge'})) return;
-  const msg = $('fw-msg');
-  const bar = $('fw-progress');
+// Uploads an image to /device/ota; the ring follows the upload
+function uploadFirmware(file, version) {
   const before = status ? status.firmware.partition : null;
-  $('fw-btn').disabled = true;
-  $('fw-file').disabled = true;
-  bar.hidden = false;
-  bar.value = 0;
-  setMsg(msg, 'Uploading…');
-
-  const done = (text) => {
-    setMsg(msg, text, 'bad');
-    $('fw-btn').disabled = false;
-    $('fw-file').disabled = false;
-    bar.hidden = true;
-  };
   const started = Date.now();
   const secs = (t) => Math.round((Date.now() - t) / 1000);
   let uploaded = 0;
+  busy({mode: 'progress', frac: 0, title: 'Installing ' + version, text: 'Sending it to the bridge…'});
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/device/ota');
   xhr.setRequestHeader('Content-Type', 'application/octet-stream');
   xhr.upload.onprogress = (e) => {
     if (!e.lengthComputable) return;
-    const pct = Math.floor(100 * e.loaded / e.total);
-    bar.value = pct;
-    setMsg(msg, `Uploading… ${pct}% (${secs(started)} s)`);
+    busy({mode: 'progress', frac: e.loaded / e.total, title: 'Installing ' + version,
+          text: `Sending it to the bridge: ${(e.loaded / 1048576).toFixed(2)} of ${(e.total / 1048576).toFixed(2)} MB`});
   };
   // The upload is done; the bridge now checks the whole image and switches to it
   xhr.upload.onload = () => {
     uploaded = Date.now();
-    bar.removeAttribute('value');  // indeterminate
-    setMsg(msg, `Uploaded in ${secs(started)} s. Verifying and installing…`);
+    busy({mode: 'spin', title: 'Installing ' + version, text: `Uploaded in ${secs(started)} s. Checking and installing…`});
   };
   xhr.onload = () => {
-    if (xhr.status === 401) { showAuth('login'); return; }
+    if (xhr.status === 401) { busyHide(); showAuth('login'); return; }
     if (xhr.status !== 200) {
-      let text = xhr.responseText;
-      try { text = JSON.parse(text).error || text; } catch (e) { /* plain text */ }
-      done('Update failed: ' + (text || xhr.statusText));
+      let t = xhr.responseText;
+      try { t = JSON.parse(t).error || t; } catch (e) { /* plain text */ }
+      busy({mode: 'bad', title: 'The update failed', text: t || xhr.statusText, actions: [closeAction]});
       return;
     }
-    const installed = uploaded ? ` (upload ${Math.round((uploaded - started) / 1000)} s, ` +
-                                 `install ${secs(uploaded)} s)` : '';
-    setMsg(msg, 'Installed' + installed + '. Restarting…');
-    waitForReboot({partition: before, version: fwImage.version});
+    const took = uploaded ? `Upload ${Math.round((uploaded - started) / 1000)} s, install ${secs(uploaded)} s.` : '';
+    waitForReboot({partition: before, version}, 'Restarting into ' + version + '…', took);
   };
-  xhr.onerror = () => done('Upload failed (connection lost)');
+  xhr.onerror = () => busy({mode: 'bad', title: 'The connection to the bridge dropped',
+                            text: 'The update did not finish; the bridge keeps its current firmware.', actions: [closeAction]});
   xhr.send(file);
-};
+}
 
 // Waits for the bridge to come back. After an update, the new firmware runs
 // from the other OTA slot; still running from the old slot means it failed
 // to start and was rolled back. The session is gone after a restart, so this
 // ends at the login form.
-async function waitForReboot(update, msg = $('fw-msg')) {
-  const base = msg.textContent.replace(/\s*(Restarting|Rebooting)….*$/, '');
+async function waitForReboot(update, title, detail) {
   const started = Date.now();
-  const limit = 120000;  // WiFi reconnection can take a while
-  const tick = setInterval(() => {
-    const s = Math.round((Date.now() - started) / 1000);
-    setMsg(msg, `${base ? base + ' ' : ''}Restarting… ${s} s`);
-  }, 1000);
+  const limit = 120000;  // Wi-Fi reconnection can take a while
+  const base = (detail ? detail + '\n' : '') + (update ? 'The bridge keeps the new firmware once it runs.' : 'The page reconnects by itself.');
+  const tick = () => busy({mode: 'spin', title, text: base + `\n${Math.round((Date.now() - started) / 1000)} s`});
+  tick();
+  const timer = setInterval(tick, 1000);
   await sleep(4000);  // let it actually go down first
   let s = null;
   while (!s && Date.now() - started < limit) {
     // Short timeout: while the bridge is down, a request can otherwise hang
     // for a long time before the browser gives up
     const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), 3000);
+    const t = setTimeout(() => abort.abort(), 3000);
     try {
       const res = await fetch('/api/status', {signal: abort.signal, cache: 'no-store'});
       if (res.ok) s = await res.json();
     } catch (e) { /* still restarting */ }
-    clearTimeout(timer);
+    clearTimeout(t);
     if (!s) await sleep(1000);
   }
-  clearInterval(tick);
+  clearInterval(timer);
   if (s) {
     // Reload so the page itself comes from the firmware now running (after
     // an update it may differ); the outcome is shown at the login form
     let note = {text: 'The bridge restarted. Log in again.', cls: 'ok'};
+    let result = {mode: 'ok', title: 'The bridge is back'};
     if (update && s.firmware.partition === update.partition) {
-      note = {text: `The new firmware did not start; the bridge went back to ` +
-                    `${s.firmware.version}. Log in again.`, cls: 'bad'};
+      note = {text: `The new firmware did not start; the bridge went back to ${s.firmware.version}. Log in again.`, cls: 'bad'};
+      result = {mode: 'bad', title: 'Rolled back to ' + s.firmware.version};
     } else if (update) {
       note = {text: `The bridge now runs ${s.firmware.version}. Log in again.`, cls: 'ok'};
+      result = {mode: 'ok', title: 'The bridge runs ' + s.firmware.version};
     }
+    busy(Object.assign(result, {text: 'Reloading the page…'}));
     try { sessionStorage.setItem('loginNote', JSON.stringify(note)); } catch (e) { /* ignore */ }
+    await sleep(1200);
     location.reload();
     return;
   }
-  setMsg(msg, 'The bridge did not come back. Reload the page in a moment.', 'bad');
+  busy({mode: 'bad', title: 'Taking longer than expected',
+        text: 'The bridge has not answered for two minutes. Check that it has power, then reload.' +
+              (update ? ' If the new firmware does not start, it goes back to the previous one by itself.' : ''),
+        actions: [{label: 'Reload', primary: true, onclick: () => location.reload()}]});
 }
 
 $('reboot-btn').onclick = async () => {
-  if (!await confirmModal('Reboot the bridge?', {okText: 'Reboot'})) return;
+  if (!await askUser('Restart the bridge?', 'The page reconnects by itself; log in again afterwards.', 'Restart')) return;
+  busy({mode: 'spin', title: 'Restarting the bridge…', text: 'Asking it to restart.'});
   try {
     await post('/device/reboot');
   } catch (e) {
-    setMsg($('device-msg'), e.message, 'bad');
+    busy({mode: 'bad', title: 'It did not work', text: e.message, actions: [closeAction]});
     return;
   }
-  setMsg($('device-msg'), 'Rebooting…');
-  waitForReboot(null, $('device-msg'));
+  waitForReboot(null, 'Restarting the bridge…');
 };
 
 $('reset-btn').onclick = async () => {
-  if (!await confirmModal('Erase all settings (WiFi, admin password and certificate) and restart in ' +
-               'setup mode?\n\nYou will need to set up the bridge again.',
-               {danger: true, okText: 'Factory reset'})) return;
+  if (!await askUser('Factory reset?', 'Erases the Wi-Fi settings, the admin password and the certificate, and ' +
+                     'restarts in setup mode. You will need to set up the bridge again.', 'Erase and restart', true)) return;
+  busy({mode: 'spin', title: 'Erasing settings…', text: 'Wi-Fi, admin password and certificate.'});
   try {
     await post('/device/factory-reset');
   } catch (e) {
-    setMsg($('device-msg'), 'Factory reset failed: ' + e.message, 'bad');
+    busy({mode: 'bad', title: 'Factory reset failed', text: e.message, actions: [closeAction]});
     return;
   }
   const ap = status ? status.wifi.ap_ssid : 'SVS-Bridge-XXXX';
-  setMsg($('device-msg'), `Reset done. Join the "${ap}" network to set up the bridge again.`, 'ok');
-  for (const b of document.querySelectorAll('button')) b.disabled = true;
+  busy({mode: 'ok', title: 'The bridge is ready to set up',
+        text: `On your phone or computer, join the Wi-Fi network\n"${ap}".\n\nThe setup opens by itself (or browse to 192.168.4.1).`});
 };
-
-// --- Navigation (tabs) ------------------------------------------------------
-
-function showTab(name) {
-  for (const b of document.querySelectorAll('#tabs button'))
-    b.classList.toggle('active', b.dataset.tab === name);
-  for (const p of document.querySelectorAll('.tab'))
-    p.hidden = p.dataset.tab !== name;
-  try { localStorage.setItem('tab', name); } catch (e) { /* ignore */ }
-  if (name === 'bridge') loadReleases();
-}
-for (const b of document.querySelectorAll('#tabs button')) b.onclick = () => showTab(b.dataset.tab);
-
-function restoreTab() {
-  let name = 'svs';
-  try { name = localStorage.getItem('tab') || 'svs'; } catch (e) { /* ignore */ }
-  if (!document.querySelector(`#tabs button[data-tab="${name}"]`)) name = 'svs';
-  showTab(name);
-}
-
-// Firmware source sub-tabs: from GitHub (default) or a manual file
-for (const b of document.querySelectorAll('#fw-tabs button')) {
-  b.onclick = () => {
-    for (const x of document.querySelectorAll('#fw-tabs button')) x.classList.toggle('active', x === b);
-    for (const p of document.querySelectorAll('.fwtab')) p.hidden = p.dataset.fwtab !== b.dataset.fwtab;
-  };
-}
 
 // --- Bridge firmware from GitHub --------------------------------------------
 
-let releasesLoaded = false;
-async function loadReleases(force) {
-  if (releasesLoaded && !force) return;
-  const sel = $('fw-rel'), msg = $('fw-gh-msg'), btn = $('fw-gh-btn');
-  sel.innerHTML = '<option value="">Loading…</option>';
-  setMsg(msg, '');
+let fwLoaded = false;
+async function fwLoadReleases(force) {
+  if (fwLoaded && !force) return;
+  fwLoaded = true;
+  const sel = $('fw-rel'), btn = $('fw-gh-btn'), ref = $('fw-refresh');
+  sel.innerHTML = '<option value="">Checking GitHub…</option>';
+  text('fw-state', 'Checking GitHub…');
+  btn.disabled = true;
+  ref.disabled = true;
+  ref.classList.add('spin');
   try {
     const data = await api('/device/releases');
-    releasesLoaded = true;
     sel.innerHTML = '';
-    if (!data.releases || !data.releases.length) {
-      sel.innerHTML = '<option value="">No releases found</option>';
-      btn.disabled = true;
-      return;
-    }
-    for (const r of data.releases) {
+    const list = data.releases || [];
+    for (const r of list) {
       const o = document.createElement('option');
       const installed = r.tag.replace(/^v/, '') === data.running;
       o.value = r.tag;
+      o.dataset.notes = r.notes_url || '';
       o.textContent = r.tag + (r.prerelease ? ' · pre-release' : '') + (installed ? ' · installed' : '');
       sel.appendChild(o);
     }
-    btn.disabled = false;
+    if (!list.length) sel.innerHTML = '<option value="">No releases found</option>';
+    const latest = list.find((r) => !r.prerelease);
+    text('fw-state', !list.length ? 'No releases yet' : latest && latest.tag.replace(/^v/, '') !== data.running
+      ? latest.tag + ' is the latest release' : 'Up to date (' + data.running + ')');
+    fwShow();
   } catch (e) {
+    fwLoaded = false;
     sel.innerHTML = '<option value="">Unavailable</option>';
-    setMsg(msg, e.message, 'warn');
-    btn.disabled = true;
+    text('fw-state', 'Could not read the releases from GitHub');
+    if (e.status !== 401) setMsg($('fw-msg'), e.message, 'warn');
+  } finally {
+    ref.disabled = false;
+    ref.classList.remove('spin');
   }
 }
+
+function fwShow() {
+  const o = $('fw-rel').selectedOptions[0];
+  $('fw-gh-btn').disabled = !o || !o.value;
+  $('fw-notes').href = (o && o.dataset.notes) || 'https://github.com/margaale/svs-bridge/releases';
+}
+
+$('fw-rel').onchange = fwShow;
+$('fw-refresh').onclick = () => { setMsg($('fw-msg'), ''); fwLoadReleases(true); };
 
 $('fw-gh-btn').onclick = async () => {
   const tag = $('fw-rel').value;
   if (!tag) return;
-  if (!await confirmModal(`Update the bridge to ${tag}?\n\nIt downloads the firmware from GitHub and restarts.`,
-                          {danger: true, okText: 'Update bridge'})) return;
-  const msg = $('fw-msg'), bar = $('fw-progress');
+  if (!await askUser(`Install ${tag}?`, 'The bridge downloads it from GitHub, checks it and restarts into it.',
+                     'Download and install', true)) return;
   const before = status ? status.firmware.partition : null;
-  const fail = (text) => {
-    setMsg(msg, text, 'bad');
-    $('fw-gh-btn').disabled = false;
-    $('fw-rel').disabled = false;
-    bar.hidden = true;
-  };
-  $('fw-gh-btn').disabled = true;
-  $('fw-rel').disabled = true;
-  bar.hidden = false;
-  bar.value = 0;
-  setMsg(msg, 'Downloading from GitHub… 0%');
+  const fail = (t) => busy({mode: 'bad', title: 'The update failed', text: t, actions: [closeAction]});
+  busy({mode: 'progress', frac: 0, title: 'Downloading ' + tag, text: 'The bridge downloads it from GitHub.'});
 
   // The bridge downloads server-side and streams progress back as chunked text:
   // a percentage per line, then "done" or "err:<message>".
@@ -1332,19 +1298,19 @@ $('fw-gh-btn').onclick = async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({tag}),
     });
-  } catch (e) { fail('Update failed (connection lost)'); return; }
-  if (res.status === 401) { showAuth('login'); return; }
+  } catch (e) { fail('The connection to the bridge dropped.'); return; }
+  if (res.status === 401) { busyHide(); showAuth('login'); return; }
   if (!res.ok) {
-    let text = await res.text();
-    try { text = JSON.parse(text).error || text; } catch (e) { /* plain text */ }
-    fail('Update failed: ' + (text || res.statusText));
+    let t = await res.text();
+    try { t = JSON.parse(t).error || t; } catch (e) { /* plain text */ }
+    fail(t || res.statusText);
     return;
   }
 
   const reader = res.body.getReader();
   const dec = new TextDecoder();
-  let buf = '', done = false, error = null;
-  while (true) {
+  let buf = '', error = null;
+  for (;;) {
     let chunk;
     try { chunk = await reader.read(); } catch (e) { break; }  // device rebooted
     if (chunk.done) break;
@@ -1353,20 +1319,17 @@ $('fw-gh-btn').onclick = async () => {
     while ((nl = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
-      if (line === 'done') {
-        done = true;
-      } else if (line.startsWith('err:')) {
+      if (line.startsWith('err:')) {
         error = line.slice(4);
       } else if (/^\d+$/.test(line)) {
-        bar.value = +line;
-        setMsg(msg, +line < 100 ? `Downloading from GitHub… ${line}%` : 'Verifying and installing…');
-        if (+line >= 100) bar.removeAttribute('value');  // indeterminate while it verifies
+        const pct = +line;
+        if (pct < 100) busy({mode: 'progress', frac: pct / 100, title: 'Downloading ' + tag, text: 'The bridge downloads it from GitHub.'});
+        else busy({mode: 'spin', title: 'Installing ' + tag, text: 'Checking and installing…'});
       }
     }
   }
-  if (error) { fail('Update failed: ' + error); return; }
-  setMsg(msg, 'Installed. Restarting…');
-  waitForReboot({partition: before, version: tag});
+  if (error) { fail(error); return; }
+  waitForReboot({partition: before, version: tag}, 'Restarting into ' + tag + '…');
 };
 
 // --- Init -------------------------------------------------------------------
@@ -1386,7 +1349,7 @@ try {
     showAuth('login');
   }
 })();
-setInterval(() => { if (!$('app').hidden) refresh(); }, 5000);
+setInterval(() => { if (signedIn) refresh(); }, 5000);
 </script>
 </body>
 </html>
