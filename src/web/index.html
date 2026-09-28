@@ -128,7 +128,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 .mod .mk{font:600 11px var(--mono);color:#C9CCD1;display:flex;align-items:center;gap:4px}
 .mod .mn{font-size:12px;color:var(--soft);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mod .mn.none{color:#6B6F76}
-.mod .pend{font-size:11px;color:var(--warn)}
+.mod.pend .mk,.mod.pend .mn{font-style:italic}  /* changes not saved to the SVS yet */
 .mod.sel{background:#3A1E2A;border-color:var(--accent)}
 .mod.dragging{position:relative;z-index:5;box-shadow:0 12px 28px #000a;cursor:grabbing;transition:none}
 .mod.drop{outline:2px dashed var(--accent);outline-offset:2px}
@@ -1045,11 +1045,13 @@ function txChanges() {
 // --- Rendering
 
 function modTile(o) {
-  return `<button type="button" class="mod${o.sel ? ' sel' : ''}" data-t="${o.t}" data-i="${o.i}"` +
-    (o.group ? ` data-group="${o.group}"` : '') + ` aria-label="${esc(o.aria)}"${o.sel ? ' aria-pressed="true"' : ''}>` +
+  const aria = o.aria + (o.pending ? ', changes not saved to the SVS yet' : '');
+  return `<button type="button" class="mod${o.sel ? ' sel' : ''}${o.pending ? ' pend' : ''}" data-t="${o.t}" data-i="${o.i}"` +
+    (o.group ? ` data-group="${o.group}"` : '') + ` aria-label="${esc(aria)}"${o.pending ? ' title="Changes not saved to the SVS yet"' : ''}` +
+    `${o.sel ? ' aria-pressed="true"' : ''}>` +
     o.svg + `<span class="mk" style="color:${o.color || ''}">${esc(o.kind)}${o.dot ? '<span class="vdot" title="Recognised by the SVS"></span>' : ''}</span>` +
     `<span class="mn${o.name ? '' : ' none'}">${esc(o.name || o.empty || '')}</span>` +
-    (o.pending ? '<span class="pend">not on SVS</span>' : '') + '</button>';
+    '</button>';
 }
 
 function renderStack() {
