@@ -2,6 +2,8 @@ get_filename_component(SVS_BRIDGE_ROOT ${COMPONENT_DIR}/../../../.. ABSOLUTE)
 set(CORE ${SVS_BRIDGE_ROOT}/src/core)
 
 idf_component_register(SRCS "main.cpp"
+                            "rfc2217.c"
+                            "rfc2217_proto.c"
                             "svs_usb.cpp"
                             "wifi_manager.cpp"
                             "dns_server.cpp"
