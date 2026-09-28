@@ -177,20 +177,33 @@ void scan()
 // Reporting
 // ---------------------------------------------------------------------------
 
-// The switch as the SVS tab sets it up, for Cruller: each input's module and what is connected to
-// it (the layout), as {"inputs": [{"kind", "name"}, ...]}. An empty list if no layout is saved.
+// The switch as the SVS tab sets it up, for Cruller: each input's module and the console or device
+// on it (its id from the web UI's list, and its name), and the output that goes to the RetroTINK 4K
+// (the one whose device is "rt4k" or "rt4kce"; null if none is):
+//   {"inputs": [{"kind", "name", "device"}, ...], "output": {"kind", "name", "device"} | null}
 static std::string describe_switch()
 {
     JsonDocument layout;
     if (deserializeJson(layout, svs_settings::layout_json()) != DeserializationError::Ok) {
         layout.clear();
     }
+    auto port = [](JsonObject o, JsonObjectConst l) {
+        o["kind"] = l["kind"] | "";
+        o["name"] = l["name"] | "";
+        o["device"] = l["device"] | "";
+    };
     JsonDocument doc;
     JsonArray inputs = doc["inputs"].to<JsonArray>();
     for (JsonObjectConst l : layout["inputs"].as<JsonArrayConst>()) {
-        JsonObject o = inputs.add<JsonObject>();
-        o["kind"] = l["kind"] | "";
-        o["name"] = l["name"] | "";
+        port(inputs.add<JsonObject>(), l);
+    }
+    doc["output"] = nullptr;
+    for (JsonObjectConst l : layout["outputs"].as<JsonArrayConst>()) {
+        std::string device = l["device"] | "";
+        if (device == "rt4k" || device == "rt4kce") {
+            port(doc["output"].to<JsonObject>(), l);
+            break;
+        }
     }
     std::string out;
     serializeJson(doc, out);
