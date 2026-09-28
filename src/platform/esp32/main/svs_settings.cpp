@@ -28,6 +28,12 @@ static const uint32_t ANSWER_TIMEOUT_MS = 800;
 static const int ATTEMPTS = 2;
 static const uint32_t WRITE_GAP_MS = 60;         // the utility waits 50 ms after each W
 static const uint32_t INPUT_CHANGE_TIMEOUT_MS = 3000;
+// After a transcoder command: how long the SVS gets before the check, and how
+// often the check is tried (the SVS may answer the command itself first, or
+// apply it a moment later)
+static const uint32_t TX_SETTLE_MS = 300;
+static const int TX_CHECKS = 5;
+static const uint32_t TX_CHECK_GAP_MS = 200;
 static const size_t MAX_LAYOUT = 3900;  // NVS strings take up to 4000 bytes
 static const size_t MAX_NAME = 32;
 static const size_t MAX_DEVICE = 16;
@@ -296,30 +302,47 @@ static void write_task(void *arg)
         r.eeprom.set(w.first, w.second);
     }
 
-    // The transcoders, then back to the input that was on screen
+    // The transcoders, then back to the input that was on screen. Each step
+    // goes to the serial log, so a failure shows what the SVS answered.
+    std::string failed;
     if (!tx.empty()) {
         int prev = svs_usb::info().current_input;
         for (auto &t : tx) {
             set_phase("Setting the transcoder of input " + std::to_string(t.input), (int)(100 * step++ / steps));
-            std::string change = "SVS_Change_Input_" + std::to_string(t.input);
+            const std::string n = std::to_string(t.input);
+            std::string change = "SVS_Change_Input_" + n;
             std::string cmd = t.rgb_to_ypbpr ? (t.on ? "SVS_RGB_Comp_ON" : "SVS_RGB_Comp_OFF")
                                              : (t.on ? "SVS_Comp_RGB_ON" : "SVS_Comp_RGB_OFF");
-            if (svs_usb::send_quiet(change) != ESP_OK || !wait_for_input(t.input) ||
-                svs_usb::send_quiet(cmd) != ESP_OK) {
-                finish("The SVS did not switch to input " + std::to_string(t.input) +
-                           " to set its transcoder. The other settings were saved.", false);
-                vTaskDelete(NULL);
+            std::string check = (t.rgb_to_ypbpr ? "Y" : "G") + n;
+            if (svs_usb::send_quiet(change) != ESP_OK || !wait_for_input(t.input)) {
+                svs_usb::log_note("Transcoder: the SVS did not report input " + n + " after " + change);
+                failed = "The SVS did not switch to input " + n + " to set its transcoder.";
+                break;
             }
-            vTaskDelay(pdMS_TO_TICKS(WRITE_GAP_MS));
-            int v;
-            std::string check = (t.rgb_to_ypbpr ? "Y" : "G") + std::to_string(t.input);
-            if (!ask_byte(check, v) || (v == 0) != t.on) {
-                finish("The transcoder of input " + std::to_string(t.input) +
-                           " did not change. The other settings were saved.", false);
-                vTaskDelete(NULL);
+            if (svs_usb::send_quiet(cmd) != ESP_OK) {
+                failed = "Could not send " + cmd + " to the SVS.";
+                break;
+            }
+            vTaskDelay(pdMS_TO_TICKS(TX_SETTLE_MS));
+            int v = -1;
+            bool ok = false;
+            for (int k = 0; k < TX_CHECKS && !ok; k++) {
+                if (k > 0) {
+                    vTaskDelay(pdMS_TO_TICKS(TX_CHECK_GAP_MS));
+                }
+                ok = ask_byte(check, v) && (v == 0) == t.on;
+            }
+            svs_usb::log_note("Transcoder: input " + n + ": " + cmd + ", then " + check + " answered " +
+                              (v < 0 ? std::string("nothing") : std::to_string(v)) + " (0 = on)" +
+                              (ok ? "" : ": not changed"));
+            if (!ok) {
+                failed = "The transcoder of input " + n + " did not change (" + check + " answered " +
+                         (v < 0 ? std::string("nothing") : std::to_string(v)) + " after " + cmd + ").";
+                break;
             }
             (t.rgb_to_ypbpr ? r.settings[t.input - 1].rgb_to_ypbpr : r.settings[t.input - 1].ypbpr_to_rgb) = t.on;
         }
+        // Back to the input that was on screen, also after a failure
         svs_usb::send_quiet("SVS_Change_Input_" + std::to_string(prev > 0 ? prev : 0));
     }
 
@@ -331,6 +354,11 @@ static void write_task(void *arg)
     r.seq = ++s_seq;
     s_read = r;
     xSemaphoreGive(s_mutex);
+    // What was saved is kept either way, so the page shows only what is left
+    if (!failed.empty()) {
+        finish(failed + " The other settings were saved; see the serial log.", false);
+        vTaskDelete(NULL);
+    }
     char buf[96];
     snprintf(buf, sizeof(buf), "Saved to the SVS: %u bytes and %u transcoder settings",
              (unsigned)writes.size(), (unsigned)tx.size());
