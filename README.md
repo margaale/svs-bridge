@@ -60,7 +60,7 @@ moved house), the setup network comes back while it keeps retrying.
 Erases all settings (WiFi, TLS certificate) and reboots into setup mode; the
 installed firmware stays. Either:
 
-- Web UI → **Device** → **Factory reset**, or
+- Web UI → **Bridge** → **Factory reset**, or
 - hold the **BOOT** button for 10 s while the bridge is running (the console
   announces it after 2 s; releasing earlier cancels).
 
@@ -82,9 +82,9 @@ HTTPS.
 
 ## Firmware updates (OTA)
 
-In the web UI, **Bridge firmware update** → pick `build/svs_bridge.bin`. The
-page shows its version, build date and SHA-256 before anything is sent; then
-**Update bridge**. The image is checked again on the bridge (ESP-IDF app,
+In the web UI, **Bridge** → **Bridge firmware**: pick a release and **Download and
+install**, or **Install from a file…** with `build/svs_bridge.bin` (the page
+shows its version, build date and SHA-256 before anything is sent). The image is checked again on the bridge (ESP-IDF app,
 ESP32-S3, project `svs_bridge`, checksum) before it switches to it.
 
 The new firmware is kept only once it connects to the WiFi network (5 minutes
@@ -106,7 +106,7 @@ No cloud, no MQTT — Home Assistant polls the bridge over the LAN.
   firmware) and bridge diagnostics (WiFi RSSI, uptime).
 
 Both need an `Authorization: Bearer <token>` header. The token is shown in the
-web UI under **Home Assistant** (copy or regenerate it there). The bridge also
+web UI's **Home Assistant** tab (copy or regenerate it there). The bridge also
 advertises itself over mDNS (`_svsbridge._tcp`) so Home Assistant discovers it
 automatically.
 
