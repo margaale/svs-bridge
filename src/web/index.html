@@ -915,10 +915,8 @@ function face(kind, role, o) {
   }
   const names = {scart: 'SCART', component: 'COMPONENT', vga: 'VGA', svideo: 'COMPOSITE', dterm: 'D-TERMINAL', bnc: 'BNC'};
   const printed = names[kind] ? names[kind] + (role === 'out' ? ' OUTPUT' : ' INPUT') : '';
-  const strip = {in: '#5A5F68', out: '#4FB3D9', ctl: '#E8618C', tx: '#4CC38A'}[role];
   return `<svg viewBox="0 0 112 200" aria-hidden="true" font-family="IBM Plex Mono,monospace">` +
     `<rect x="1" y="1" width="110" height="198" rx="5" fill="#161719" stroke="${o.lit ? '#E8618C' : '#2E3033'}" stroke-width="${o.lit ? 3 : 1.5}"/>` +
-    `<rect x="96" y="12" width="6" height="3" rx="1" fill="${strip}"/>` +
     (printed ? `<text x="14" y="100" transform="rotate(-90 14 100)" font-size="7.5" font-weight="500" letter-spacing="1.2" fill="#6F737A" text-anchor="middle" dominant-baseline="middle">${printed}</text>` : '') +
     body + (o.tag ? `<text x="62" y="190" font-size="9" font-weight="500" fill="#8A8E95" text-anchor="middle">${o.tag}</text>` : '') + '</svg>';
 }
