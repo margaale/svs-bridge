@@ -180,21 +180,6 @@ size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max)
     return n;
 }
 
-// The last firmware, current-input and total-inputs lines the SVS printed (guarded by s_dev_mutex)
-static std::string s_banner_fw, s_banner_current, s_banner_total;
-
-std::string banner()
-{
-    xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
-    std::string out;
-    for (const std::string *l : {&s_banner_fw, &s_banner_current, &s_banner_total}) {
-        if (!l->empty()) {
-            out += *l + "\r\n";
-        }
-    }
-    xSemaphoreGive(s_dev_mutex);
-    return out;
-}
 
 // ---------------------------------------------------------------------------
 // USB callbacks
@@ -301,19 +286,14 @@ static void parse_line(const std::string &line)
     switch (p.kind) {
     case LineKind::Firmware:
         s_info.firmware = line;
-        s_banner_fw = line;
         s_info.live = true;
         s_info.boots_seen++;
         break;
     case LineKind::InputChange:
-        if (line.rfind("SVS CURRENT", 0) == 0) {
-            s_banner_current = line;
-        }
         s_info.current_input = p.value;
         s_info.inputs_live = true;
         break;
     case LineKind::TotalInputs:
-        s_banner_total = line;
         s_info.total_inputs = p.value;
         s_info.inputs_live = true;
         break;
@@ -488,9 +468,6 @@ static void device_task(void *arg)
         xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
         s_dev = nullptr;
         s_info.firmware.clear();
-        s_banner_fw.clear();
-        s_banner_current.clear();
-        s_banner_total.clear();
         s_info.current_input = -1;
         s_info.total_inputs = -1;
         s_info.live = false;

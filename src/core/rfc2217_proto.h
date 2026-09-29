@@ -28,6 +28,7 @@ typedef struct {
     uint32_t options_they;         // they WILL (we said DO)
     uint32_t baud;                 // last values asked for (reported only)
     uint8_t datasize, parity, stopsize;
+    bool dtr;                      // DTR as the client last set it (off until it says so)
 } rfc2217_t;
 
 typedef struct {
@@ -35,6 +36,8 @@ typedef struct {
     size_t data_len, data_max;
     uint8_t *reply;      // bytes to send back to the client
     size_t reply_len, reply_max;
+    bool dtr_raised;     // set when the client turned DTR on (it was off): opening a serial port does that
+                         // and resets an Arduino-like board, which the SVS's utility relies on
 } rfc2217_io_t;
 
 void rfc2217_init(rfc2217_t *s);

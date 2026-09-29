@@ -134,15 +134,16 @@ UI tells whether the new version is running or was rolled back.
 
 The SVS's serial console is also on TCP port 2217 as an RFC 2217 server, for
 tools such as pyserial (`rfc2217://svs-bridge.local:2217`). Up to 3 clients
-share it like a serial cable: each gets what the SVS says byte for byte (after
-the last firmware and input lines it printed, for a client that connects
-later), and what a client sends reaches the SVS as it comes, unless the web
-UI is reading or writing its settings (they reach it only with the HD-15
-unplugged).
+share it like a serial cable: each gets what the SVS says byte for byte, and
+what a client sends reaches the SVS as it comes, unless the web UI is reading
+or writing its settings (they reach it only with the HD-15 unplugged). A client
+that raises DTR, as opening a serial port does, restarts the SVS (video drops
+for a moment) and gets the banner that follows.
 
 This is meant to let the official SVS Management Utility configure the switch
-over the network: create a virtual COM port that forwards to `svs-bridge.local:2217` (for example
-com0com with com2tcp) and pick it in the utility. Its firmware update is not
+over the network: create a virtual COM port that forwards to
+`svs-bridge.local:2217` (for example com0com with com2tcp; it must pass DTR
+on) and pick it in the utility. Its firmware update is not
 supported through the bridge: use the web UI's.
 
 **Bridge** → **Serial console clients** lists who is connected: address,

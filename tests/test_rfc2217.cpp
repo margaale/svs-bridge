@@ -22,6 +22,7 @@ using Bytes = std::vector<uint8_t>;
 
 struct Result {
     Bytes data, reply;
+    bool dtr_raised;
 };
 
 static Result feed(rfc2217_t &s, const Bytes &in, uint8_t modem = 0xb0) {
@@ -32,7 +33,7 @@ static Result feed(rfc2217_t &s, const Bytes &in, uint8_t modem = 0xb0) {
     io.reply = reply;
     io.reply_max = sizeof(reply);
     rfc2217_input(&s, in.data(), in.size(), &io, modem);
-    return {Bytes(data, data + io.data_len), Bytes(reply, reply + io.reply_len)};
+    return {Bytes(data, data + io.data_len), Bytes(reply, reply + io.reply_len), io.dtr_raised};
 }
 
 static void test_greeting() {
@@ -88,6 +89,16 @@ static void test_settings_are_acknowledged() {
     // SET-CONTROL 8 (DTR on) is acknowledged as asked
     r = feed(s, {255, 250, 44, 5, 8, 255, 240});
     CHECK((r.reply == Bytes{255, 250, 44, 105, 8, 255, 240}));
+    // ... and only DTR going on (it was off) is reported, so a client opening its port restarts the SVS once
+    CHECK(r.dtr_raised);
+    r = feed(s, {255, 250, 44, 5, 8, 255, 240});
+    CHECK(!r.dtr_raised);
+    r = feed(s, {255, 250, 44, 5, 9, 255, 240});  // DTR off
+    CHECK(!r.dtr_raised && r.reply == (Bytes{255, 250, 44, 105, 9, 255, 240}));
+    r = feed(s, {255, 250, 44, 5, 11, 255, 240});  // RTS on: not DTR
+    CHECK(!r.dtr_raised);
+    r = feed(s, {255, 250, 44, 5, 8, 255, 240});
+    CHECK(r.dtr_raised);
 }
 
 static void test_notify_and_signature() {

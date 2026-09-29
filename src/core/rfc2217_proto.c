@@ -32,6 +32,10 @@
 #define CPO_PURGE_DATA         12
 #define SERVER_OFFSET          100
 
+// SET-CONTROL values for the DTR line
+#define CONTROL_DTR_ON         8
+#define CONTROL_DTR_OFF        9
+
 #define SIGNATURE "SVS Bridge"
 
 enum { ST_DATA, ST_IAC, ST_VERB, ST_SB, ST_SB_IAC };
@@ -171,6 +175,15 @@ static void on_subneg(rfc2217_t *s, rfc2217_io_t *io, uint8_t modem_state) {
         case CPO_FLOWCONTROL_RESUME:
             break; // the client pausing our output: nothing to confirm
         case CPO_SET_CONTROL:
+            // 8 DTR on, 9 DTR off: only the moment it goes on is reported (see dtr_raised)
+            if (n && arg[0] == CONTROL_DTR_ON) {
+                if (!s->dtr) io->dtr_raised = true;
+                s->dtr = true;
+            } else if (n && arg[0] == CONTROL_DTR_OFF) {
+                s->dtr = false;
+            }
+            if (n) put_cpo(io, cmd, arg, 1); // acknowledged as asked
+            break;
         case CPO_SET_LINESTATE_MASK:
         case CPO_SET_MODEMSTATE_MASK:
         case CPO_PURGE_DATA:

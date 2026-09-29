@@ -98,10 +98,6 @@ std::vector<LogEntry> log_since(uint32_t after, size_t max);
 uint32_t rx_head();
 size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max);
 
-// The last firmware, current-input and total-inputs lines the SVS printed, each ended
-// with CRLF ("" if it has said nothing since it was plugged in): what a client that connects later missed.
-std::string banner();
-
 // Adds a link event ('*') to the log, e.g. from the firmware updater
 void log_note(const std::string &text);
 

@@ -2,8 +2,9 @@
 // "rfc2217://svs-bridge.local:2217", or a virtual COM port for the official SVS Management Utility.
 // Up to 3 clients share it (a 4th replaces the oldest). It works like a serial cable: every client
 // gets what the SVS says byte for byte (blank and repeated lines included, unlike the web UI's traffic
-// log), after the last firmware/inputs lines it printed; what a client sends goes to the SVS as it
-// comes (svs_usb::send_raw), unless the web UI is reading or writing its settings.
+// log); what a client sends goes to the SVS as it comes (svs_usb::send_raw), unless the web UI is
+// reading or writing its settings. A client raising DTR (opening a serial port) restarts the SVS, as
+// the official utility expects, and gets its banner.
 // Baud rate and the other line settings are acknowledged but change nothing (see rfc2217_proto.h).
 
 #pragma once

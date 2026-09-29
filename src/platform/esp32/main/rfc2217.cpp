@@ -19,6 +19,7 @@
 #define MAX_CLIENTS           3
 #define TICK_MS               20
 #define TRACE_MS              60000 // how long after connecting what the SVS says is also noted in the log
+#define RESTART_MIN_GAP_MS    4000  // a client that reopens its port in a loop can't keep the SVS restarting
 #define CLIENT_LINE_MAX       128
 #define KEEPALIVE_IDLE_S      30  // TCP keepalive (see add_client)
 #define KEEPALIVE_INTERVAL_S  5
@@ -158,6 +159,26 @@ static void from_client(client_t *c, const uint8_t *data, size_t len) {
     }
 }
 
+// A client raising DTR, as opening a serial port does, restarts the SVS like it would a board with an
+// auto-reset line: the official utility waits for the banner that follows. Video drops for a moment.
+static void restart_for_dtr(client_t *c) {
+    static int64_t last_ms = -RESTART_MIN_GAP_MS;
+    const int64_t now = now_ms();
+    if (now - last_ms < RESTART_MIN_GAP_MS) {
+        note(c, "DTR raised: not restarting the SVS, it was restarted moments ago");
+        return;
+    }
+    if (svs_settings::busy()) {
+        note(c, "DTR raised: not restarting the SVS, its settings are being read or written");
+        return;
+    }
+    const esp_err_t err = svs_usb::restart_svs();
+    if (err == ESP_OK) last_ms = now;
+    note(c, err == ESP_OK                  ? "DTR raised: restarting the SVS"
+            : err == ESP_ERR_INVALID_STATE ? "DTR raised: not restarting the SVS, it is not connected"
+                                           : "DTR raised: could not restart the SVS (firmware update in progress?)");
+}
+
 static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, size_t size) {
     client_t *c = nullptr;
     for (int i = 0; i < MAX_CLIENTS && !c; i++) if (clients[i].fd < 0) c = &clients[i];
@@ -185,6 +206,7 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     inet_ntoa_r(peer->sin_addr, c->ip, sizeof(c->ip));
     c->port = ntohs(peer->sin_port);
     rfc2217_init(&c->proto);
+    c->rx_pos = svs_usb::rx_head();  // from now on, not what came before
     c->modem_sent = -1;
     c->line_len = 0;
     const size_t n = rfc2217_greeting(&c->proto, buf, size);
@@ -196,12 +218,6 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
         snprintf(b, sizeof(b), "client connected from port %u (%d of %d connected); offered: ", (unsigned)c->port,
                  connected_count(), MAX_CLIENTS);
         note(c, b + describe(buf, n));
-        // What the SVS said when it started (firmware, inputs): a client that opens the port later
-        // (the official utility does, to read the banner) would otherwise wait for a restart.
-        const std::string banner = svs_usb::banner();
-        c->rx_pos = svs_usb::rx_head();
-        if (!banner.empty()) note(c, "to the client: " + describe((const uint8_t *)banner.data(), banner.size()));
-        if (!banner.empty() && !send_text(c, banner)) drop_client(c, "failed");
     }
 }
 
@@ -267,6 +283,7 @@ static void rfc2217_task(void *param) {
                     drop_client(c, "failed");
                     continue;
                 }
+                if (io.dtr_raised) restart_for_dtr(c);
                 if (io.data_len) from_client(c, data, io.data_len);
                 if (c->fd < 0) continue;
             }
