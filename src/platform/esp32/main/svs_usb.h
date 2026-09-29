@@ -48,6 +48,10 @@ esp_err_t restart_svs();
 // while a firmware update holds the link.
 esp_err_t send(const std::string &cmd);
 
+// Writes bytes to the SVS exactly as given (no line ending added, not logged): for a serial client
+// such as an RFC 2217 one. Same errors as send().
+esp_err_t send_raw(const uint8_t *data, size_t len);
+
 // --- Settings sessions ---------------------------------------------------------
 //
 // Reading and writing the SVS's settings (see svs_settings.h) sends hundreds of
@@ -61,6 +65,10 @@ void session_end();
 // one of its "SVS ..." status lines (how R, Y and G answer). Only inside a
 // session. Same errors as send(), plus ESP_ERR_TIMEOUT.
 esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms);
+
+// Like query(), for a command that answers with several lines (Y/G: the input number, then the
+// value): waits settle_ms after each line for another, and returns the last one.
+esp_err_t query_last(const std::string &cmd, std::string &answer, uint32_t timeout_ms, uint32_t settle_ms);
 
 // Sends a command inside a session and collects every line the SVS sends for
 // window_ms afterwards, its "SVS ..." status lines included, as received. For
@@ -87,6 +95,12 @@ uint32_t log_head();
 
 // Entries with seq > after (at most max), oldest first
 std::vector<LogEntry> log_since(uint32_t after, size_t max);
+
+// Everything the SVS sends, byte for byte (the log above drops blank and repeated lines).
+// rx_head() is where "from now on" starts; rx_since() copies up to max bytes from `pos` and moves it
+// on (a reader that falls more than ~2 KB behind loses the oldest bytes).
+uint32_t rx_head();
+size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max);
 
 // Adds a link event ('*') to the log, e.g. from the firmware updater
 void log_note(const std::string &text);

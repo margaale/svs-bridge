@@ -138,6 +138,50 @@ std::vector<LogEntry> log_since(uint32_t after, size_t max)
 }
 
 // ---------------------------------------------------------------------------
+// Raw receive tap (RFC 2217 clients)
+// ---------------------------------------------------------------------------
+//
+// Everything the SVS sends, byte for byte: the traffic log leaves out blank and repeated lines,
+// which a serial client (the official utility counts lines and waits for the 2 s heartbeat) needs.
+
+static const size_t TAP_SIZE = 2048;  // power of two
+static SemaphoreHandle_t s_tap_mutex = nullptr;
+static uint8_t s_tap[TAP_SIZE];
+static uint32_t s_tap_total = 0;      // bytes ever received; the newest is s_tap[(total - 1) % TAP_SIZE]
+
+static void tap_add(const uint8_t *data, size_t len)
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    for (size_t i = 0; i < len; i++) {
+        s_tap[s_tap_total++ % TAP_SIZE] = data[i];
+    }
+    xSemaphoreGive(s_tap_mutex);
+}
+
+uint32_t rx_head()
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    uint32_t head = s_tap_total;
+    xSemaphoreGive(s_tap_mutex);
+    return head;
+}
+
+size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max)
+{
+    xSemaphoreTake(s_tap_mutex, portMAX_DELAY);
+    if (s_tap_total - pos > TAP_SIZE) {
+        pos = s_tap_total - TAP_SIZE;  // fell behind: the oldest bytes are gone
+    }
+    size_t n = 0;
+    while (pos != s_tap_total && n < max) {
+        buf[n++] = s_tap[pos++ % TAP_SIZE];
+    }
+    xSemaphoreGive(s_tap_mutex);
+    return n;
+}
+
+
+// ---------------------------------------------------------------------------
 // USB callbacks
 // ---------------------------------------------------------------------------
 
@@ -269,6 +313,9 @@ static void rx_print_task(void *arg)
     std::string parsed;  // printable characters only, for parse_line()
     while (true) {
         size_t n = xStreamBufferReceive(s_rx_stream, buf, sizeof(buf), pdMS_TO_TICKS(50));
+        if (n > 0) {
+            tap_add(buf, n);
+        }
 #if CONFIG_SVS_HEX_DUMP
         if (n > 0) {
             std::string hex;
@@ -443,6 +490,7 @@ void start()
     s_rx_stream = xStreamBufferCreate(4096, 1);
     s_raw_stream = xStreamBufferCreate(1024, 1);
     s_log_mutex = xSemaphoreCreateMutex();
+    s_tap_mutex = xSemaphoreCreateMutex();
     s_answers = xQueueCreate(8, sizeof(Answer));
     s_query_mutex = xSemaphoreCreateMutex();
     s_capture_mutex = xSemaphoreCreateMutex();
@@ -550,6 +598,21 @@ esp_err_t send(const std::string &cmd)
     return do_send(cmd);
 }
 
+esp_err_t send_raw(const uint8_t *data, size_t len)
+{
+    xSemaphoreTake(s_dev_mutex, portMAX_DELAY);
+    if (s_dev == nullptr || s_raw) {
+        xSemaphoreGive(s_dev_mutex);
+        return s_raw ? ESP_ERR_NOT_ALLOWED : ESP_ERR_INVALID_STATE;
+    }
+    esp_err_t err = s_dev->tx_blocking(const_cast<uint8_t *>(data), len, 1000);
+    xSemaphoreGive(s_dev_mutex);
+    if (err != ESP_OK) {
+        log_add('*', std::string("Could not send to the SVS: ") + esp_err_to_name(err));
+    }
+    return err;
+}
+
 // ---------------------------------------------------------------------------
 // Settings sessions
 // ---------------------------------------------------------------------------
@@ -577,6 +640,30 @@ esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms
         Answer a;
         if (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
             answer = a.text;
+        } else {
+            err = ESP_ERR_TIMEOUT;
+        }
+    }
+    xSemaphoreGive(s_query_mutex);
+    return err;
+}
+
+esp_err_t query_last(const std::string &cmd, std::string &answer, uint32_t timeout_ms, uint32_t settle_ms)
+{
+    if (!s_session) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(s_query_mutex, portMAX_DELAY);
+    xQueueReset(s_answers);  // a late answer to an earlier command
+    esp_err_t err = do_send(cmd, false);
+    if (err == ESP_OK) {
+        Answer a;
+        if (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
+            answer = a.text;
+            // The rest of the answer follows within a few ms; the last line is the one kept
+            while (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(settle_ms)) == pdTRUE) {
+                answer = a.text;
+            }
         } else {
             err = ESP_ERR_TIMEOUT;
         }

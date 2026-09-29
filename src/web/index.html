@@ -1604,6 +1604,8 @@ async function pollLog() {
       if (empty) empty.remove();
     }
     for (const e of r.entries) {
+      // Two polls can overlap (Send starts one while the timer's is in flight): draw each entry once
+      if (e.seq <= logAfter) continue;
       const line = document.createElement('div');
       line.className = e.d === '>' ? 'tx' : e.d === '*' ? 'ev' : 'rx';
       const arrow = e.d === '>' ? '→' : e.d === '*' ? '•' : '←';

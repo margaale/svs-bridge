@@ -143,6 +143,29 @@ inline int parse_byte_reply(const std::string &line)
     return any ? value : -1;
 }
 
+// The SVS answers Y<n> / G<n> with two lines: the input number, then the value (0 = on). Seen on a
+// real SVS: Y1 -> "1", "1"; Y4 -> "4", "0" (only input 4 had the conversion on). So the value is
+// the last line that is only a number; -1 if there is none.
+inline int transcoder_value(const std::vector<std::string> &lines)
+{
+    int value = -1;
+    for (const auto &l : lines) {
+        int v = -1;
+        bool other = false;
+        for (char c : l) {
+            if (c >= '0' && c <= '9') {
+                v = (v < 0 ? 0 : v * 10) + (c - '0');
+            } else if (c != ' ' && c != '\r' && c != '\n') {
+                other = true;
+            }
+        }
+        if (!other && v >= 0 && v <= 255) {
+            value = v;
+        }
+    }
+    return value;
+}
+
 // --- Settings ------------------------------------------------------------------
 
 struct InputSettings {

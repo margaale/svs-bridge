@@ -28,6 +28,7 @@ typedef struct {
     uint32_t options_they;         // they WILL (we said DO)
     uint32_t baud;                 // last values asked for (reported only)
     uint8_t datasize, parity, stopsize;
+    bool dtr;                      // DTR as the client last set it (off until it says so)
 } rfc2217_t;
 
 typedef struct {
@@ -35,6 +36,8 @@ typedef struct {
     size_t data_len, data_max;
     uint8_t *reply;      // bytes to send back to the client
     size_t reply_len, reply_max;
+    bool dtr_raised;     // set when the client turned DTR on (it was off): opening a serial port does that
+                         // and resets an Arduino-like board, which the SVS's utility relies on
 } rfc2217_io_t;
 
 void rfc2217_init(rfc2217_t *s);
@@ -53,6 +56,35 @@ size_t rfc2217_modemstate(uint8_t modem_state, uint8_t *out, size_t max);
 // Serial data for the client, with 0xFF doubled. Returns bytes written to out; *used says how much of
 // `in` fit.
 size_t rfc2217_escape(const uint8_t *in, size_t len, uint8_t *out, size_t max, size_t *used);
+
+// The SVS answers Y<n> / G<n> with two lines: the input number, then the value. A tool that reads one
+// line per command (the official utility) takes the number for the value and every later answer is one
+// line behind. After the client asks Y<n> / G<n> (rfc2217_echo_expect), the first line coming from the
+// SVS that is only that number is dropped; everything else passes untouched, and the value line follows.
+#define RFC2217_ECHO_HOLD_MAX 40
+
+typedef struct {
+    int input;                          // the input asked about; -1: not waiting for an echo
+    uint8_t hold[RFC2217_ECHO_HOLD_MAX]; // the line being read while waiting
+    size_t hold_len;
+    uint32_t dropped;                   // echo lines dropped so far
+} rfc2217_echo_t;
+
+void rfc2217_echo_init(rfc2217_echo_t *e);
+void rfc2217_echo_expect(rfc2217_echo_t *e, int input);
+bool rfc2217_echo_pending(const rfc2217_echo_t *e);
+
+// Filters bytes from the SVS into out (room for len + RFC2217_ECHO_HOLD_MAX); returns how many.
+size_t rfc2217_echo_filter(rfc2217_echo_t *e, const uint8_t *in, size_t len, uint8_t *out, size_t max);
+
+// Gives up waiting (the answer never came): what is held goes out, unfiltered.
+size_t rfc2217_echo_release(rfc2217_echo_t *e, uint8_t *out, size_t max);
+
+// A readable description of Telnet/RFC 2217 bytes, for the traffic log: "WILL BINARY, DO COM-PORT,
+// SET-BAUDRATE 9600, text "AT"". Works on one chunk as it came (a sequence cut at the end is marked),
+// understands both directions (a server reply is the client's command + 100). NUL-terminated, truncated
+// with "..." if out is too small.
+void rfc2217_describe(const uint8_t *in, size_t len, char *out, size_t max);
 
 #ifdef __cplusplus
 }

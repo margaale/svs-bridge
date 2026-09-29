@@ -26,6 +26,7 @@ static const char *KEY_LAYOUT = "json";
 
 static const uint32_t ANSWER_TIMEOUT_MS = 800;
 static const int ATTEMPTS = 2;
+static const uint32_t TX_SETTLE_LINE_MS = 80;  // Y/G answer with two lines, a few ms apart
 static const uint32_t WRITE_GAP_MS = 60;         // the utility waits 50 ms after each W
 static const uint32_t INPUT_CHANGE_TIMEOUT_MS = 3000;
 // After a transcoder command: how long the SVS gets before the check
@@ -113,6 +114,21 @@ static bool ask_byte(const std::string &cmd, int &value)
     return false;
 }
 
+// Y<n> / G<n>: the value is the answer's last line (see transcoder_value)
+static bool ask_transcoder(const std::string &cmd, int &value)
+{
+    for (int attempt = 0; attempt < ATTEMPTS; attempt++) {
+        std::string answer;
+        if (svs_usb::query_last(cmd, answer, ANSWER_TIMEOUT_MS, TX_SETTLE_LINE_MS) == ESP_OK) {
+            value = parse_byte_reply(answer);
+            if (value >= 0) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 static std::string no_answer(const std::string &cmd)
 {
     return "The SVS did not answer " + cmd +
@@ -130,26 +146,6 @@ static std::string quoted(const std::vector<std::string> &lines)
         out += (out.empty() ? "\"" : " | \"") + l + "\"";
     }
     return out;
-}
-
-// The first line that is only a number (spaces aside), -1 if none
-static int bare_number(const std::vector<std::string> &lines)
-{
-    for (const auto &l : lines) {
-        int v = -1;
-        bool other = false;
-        for (char c : l) {
-            if (c >= '0' && c <= '9') {
-                v = (v < 0 ? 0 : v * 10) + (c - '0');
-            } else if (c != ' ') {
-                other = true;
-            }
-        }
-        if (!other && v >= 0 && v <= 255) {
-            return v;
-        }
-    }
-    return -1;
 }
 
 // Why a read cannot start now, "" if it can
@@ -204,8 +200,7 @@ static void read_task(void *arg)
     r.hardware = decode_hardware(r.eeprom, inputs);
     r.settings.assign(inputs, InputSettings());
 
-    // What Y/G answer, exactly, on input 1: their format is not known for sure
-    // (a real SVS answered Y4 with a line holding "4"), so it goes to the log
+    // What Y/G answer, exactly, on input 1 (two lines: the input number, then the value), to the log
     for (auto t : {std::make_pair(r.hardware.tx_rgb_to_ypbpr, "Y1"), std::make_pair(r.hardware.tx_ypbpr_to_rgb, "G1")}) {
         std::vector<std::string> lines;
         if (t.first && svs_usb::query_all(t.second, lines, TX_ANSWER_WINDOW_MS) == ESP_OK) {
@@ -227,7 +222,7 @@ static void read_task(void *arg)
             }
             std::string cmd = t.cmd + std::to_string(n);
             int v;
-            if (!ask_byte(cmd, v)) {
+            if (!ask_transcoder(cmd, v)) {
                 finish(no_answer(cmd), false);
                 vTaskDelete(NULL);
             }
@@ -342,10 +337,9 @@ static void write_task(void *arg)
     }
 
     // The transcoders, then back to the input that was on screen. Each step
-    // goes to the serial log with every line the SVS sent after the check, as
-    // its answer's format is not known for sure. The command itself works (a
-    // real SVS turned the transcoder on while its Y4 answer read "4"), so an
-    // answer that does not confirm it is reported, not taken as a failure.
+    // goes to the serial log with every line the SVS sent after the check. The
+    // command itself works, so an answer that does not confirm it is reported,
+    // not taken as a failure.
     std::string failed, unconfirmed;
     if (!tx.empty()) {
         int prev = svs_usb::info().current_input;
@@ -368,7 +362,7 @@ static void write_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(TX_SETTLE_MS));
             std::vector<std::string> lines;
             svs_usb::query_all(check, lines, TX_ANSWER_WINDOW_MS);
-            int v = bare_number(lines);
+            int v = transcoder_value(lines);
             bool confirmed = v >= 0 && (v == 0) == t.on;
             svs_usb::log_note("Transcoder: input " + n + ": " + cmd + ", then " + check + " answered " +
                               quoted(lines) + (confirmed ? " (confirmed)" : " (not confirmed; 0 = on)"));
