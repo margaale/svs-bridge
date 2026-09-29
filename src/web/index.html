@@ -74,15 +74,6 @@ dialog#ask p{margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--soft);wh
 .switch input:checked{background:#3A1E2A;border-color:var(--accent)}.switch input:checked::after{transform:translateX(18px);background:var(--accent)}
 .note{background:var(--raised);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;color:var(--soft)}
 .note.warn{background:#2A2416;color:#E3CFA3}
-.steps{list-style:none;margin:0;padding:14px 16px;background:var(--raised);border-radius:10px;display:flex;flex-direction:column;gap:14px}
-.steps>li{display:flex;gap:12px;align-items:flex-start;font-size:14px}
-.steps .sb{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:8px}
-.steps .st{font-weight:600}
-.steps .si{width:20px;height:20px;flex:none;border-radius:50%;border:2px solid #6B6F76;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;margin-top:1px}
-.steps>li[data-state=wait]{color:var(--faint)}
-.steps>li[data-state=run] .si{border-color:var(--accent);border-top-color:transparent;animation:spin 1s linear infinite}
-.steps>li[data-state=done] .si{border-color:var(--ok);color:var(--ok)}.steps>li[data-state=done] .si::before{content:'✓'}
-.steps>li[data-state=fail] .si{border-color:#E0453F;color:#E0453F}.steps>li[data-state=fail] .si::before{content:'✕'}
 /* Wi-Fi network picker (type to filter, or a hidden network by name) */
 .combo{position:relative;flex:1;min-width:0}
 .combo input{padding-right:40px}
@@ -256,24 +247,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 
 <div class="panel span3" id="svs-fw-section" hidden>
 <div class="row"><h2 class="grow">SVS firmware</h2><span class="small" id="svs-fw-state"></span></div>
-<ol class="steps">
-<li id="svs-step1" data-state="run"><span class="si"></span><div class="sb">
-<div class="row" style="flex-wrap:wrap"><span class="st grow">Identify the bootloader</span><button id="svs-check-btn">Prepare update</button></div>
-<div class="small">The SVS restarts, so video drops for a moment. Nothing is written until you press Flash SVS.</div>
-<div id="svs-boot-row" class="stack" style="gap:4px" hidden><span class="small">Bootloader</span><span id="svs-boot" class="mono" style="font-size:13px;overflow-wrap:anywhere"></span></div>
-<div id="svs-vector" class="stack" hidden>
-<div class="small">This bootloader needs the reset vector patched when flashing. The preview checks, without writing anything, that the patch the bridge would write matches what the official tool already put on the chip. Required before flashing.</div>
-<div><button id="svs-preview-btn">Preview vector patch</button></div>
-</div>
-<div class="msg" id="svs-check-msg"></div>
-<div id="svs-probe" class="stack" hidden>
-<div class="small">Restarts the SVS a few times, listening and trying to reach its bootloader with other timings and speeds. Results go to the serial log. Nothing is written.</div>
-<div><button id="svs-probe-btn">Diagnose bootloader</button></div>
-</div>
-</div></li>
-<li id="svs-step2" data-state="wait"><span class="si"></span><div class="sb">
-<span class="st">Choose the firmware</span>
-<div id="svs-controls" class="stack" hidden>
+<div class="small" id="svs-fw-now"></div>
 <div class="row" style="flex-wrap:wrap">
 <select id="svs-rel" class="grow" style="width:auto"><option value="">Official releases…</option></select>
 <button id="svs-file-btn">Or a .hex file…</button>
@@ -281,14 +255,13 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 </div>
 <div class="msg" id="svs-msg"></div>
 <div class="kv" id="svs-staged" hidden><span>Firmware</span><span id="svs-src"></span><span>Size</span><span id="svs-size"></span><span>SHA-256</span><span id="svs-sha" class="small"></span></div>
-</div>
-</div></li>
-<li id="svs-step3" data-state="wait"><span class="si"></span><div class="sb">
-<div class="row" style="flex-wrap:wrap"><span class="st grow">Flash</span><button class="primary danger" id="svs-flash-btn" disabled>Flash SVS</button></div>
-<div class="msg bad" id="svs-blocker"></div>
+<div class="row" style="flex-wrap:wrap"><button class="primary danger" id="svs-flash-btn" disabled>Update SVS</button>
+<span class="small grow">The bridge checks the SVS’s bootloader, writes the firmware and reads it back. The SVS restarts a few times: video drops.</span></div>
 <div class="msg" id="svs-flash-msg"></div>
-</div></li>
-</ol>
+<div id="svs-probe" class="stack" hidden>
+<div class="small">The diagnostics restart the SVS a few times, trying to reach its bootloader with other timings and speeds, and write what they find to the serial log. Nothing is written to the SVS.</div>
+<div><button id="svs-probe-btn">Diagnose bootloader</button></div>
+</div>
 </div>
 </section>
 
@@ -435,6 +408,7 @@ const LOCK = '<svg class="lock" viewBox="0 0 16 16" width="12" height="12" aria-
 let status = null;
 let svs = null;
 let svsStaging = false;  // a chosen SVS firmware is being downloaded / checked
+let svsUpdating = false;  // Update SVS is checking the bootloader, before the flash starts
 
 // Eye button inside every password field to show / hide what was typed
 const EYE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
@@ -807,67 +781,39 @@ function renderSvs(s) {
   const busyTask = u.task !== 'idle';
   const flashing = u.task === 'flashing';
 
-  // Step 1: identify the bootloader
-  $('svs-check-btn').disabled = busyTask || svsStaging || !s.connected;
-  $('svs-check-btn').textContent = d.checked ? 'Check again' : 'Prepare update';
-  $('svs-boot-row').hidden = !d.checked;
-  let bootStatus;
-  if (!d.compatible) {
-    bootStatus = `<span class="bad">${esc(d.problem)}</span>`;
-  } else if (d.vector && !d.vector_verified) {
-    bootStatus = '<span class="warn">Vector bootloader: preview required before flashing</span>';
-  } else if (d.vector) {
-    bootStatus = '<span class="ok">Vector patch verified: safe to flash</span>';
-  } else {
-    bootStatus = '<span class="ok">Can be updated</span>';
-  }
-  $('svs-boot').innerHTML = `${esc(d.summary)}<br>` + bootStatus;
-  const step1Done = d.checked && d.compatible && (!d.vector || d.vector_verified);
-  const step1 = ['checking', 'probing', 'previewing'].includes(u.task) ? 'run'
-    : d.checked && !d.compatible ? 'fail' : step1Done ? 'done' : 'run';
-  $('svs-step1').dataset.state = step1;
+  // What runs now, and the bootloader once the first update has identified it
+  text('svs-fw-now', 'Runs ' + (s.firmware ? s.firmware.replace(/^SVS_FW_/, 'firmware ') : 'a firmware not reported yet') +
+    (d.checked ? ' · ' + d.summary : ''));
+  text('svs-fw-state', busyTask ? u.phase + '…' : '');
 
-  // Vector patch preview (only for a compatible vector bootloader)
-  $('svs-vector').hidden = !(d.checked && d.compatible && d.vector);
-  $('svs-preview-btn').disabled = busyTask || !s.connected;
-  $('svs-preview-btn').textContent = d.vector_verified ? 'Re-check vector patch' : 'Preview vector patch';
-
-  // Diagnostics: offered when the bootloader did not answer
-  const noAnswer = u.result_of === 'checking' && !u.result_ok && !d.checked;
-  $('svs-probe').hidden = !(noAnswer || u.task === 'probing' || u.result_of === 'probing');
-  $('svs-probe-btn').disabled = busyTask || !s.connected;
-  if (u.task === 'checking' || u.task === 'probing' || u.task === 'previewing') {
-    setMsg($('svs-check-msg'), u.phase + '…');
-  } else if (u.result_of === 'probing') {
-    setMsg($('svs-check-msg'), u.result, '');
-  } else if (u.result_of === 'previewing') {
-    setMsg($('svs-check-msg'), u.result, u.result_ok ? 'ok' : 'bad');
-  } else if (noAnswer) {
-    setMsg($('svs-check-msg'), u.result, 'bad');
-  } else if (u.result_of === 'checking') {
-    setMsg($('svs-check-msg'), d.compatible ? u.result : '', '');
-  } else {
-    setMsg($('svs-check-msg'), '');
-  }
-
-  // Step 2: choose (only for an identified, compatible SVS)
-  $('svs-controls').hidden = !(d.checked && d.compatible);
-  $('svs-rel').disabled = $('svs-file-btn').disabled = busyTask || svsStaging;
+  // The firmware to write: chosen first, checked by the bridge (see stageSvsFirmware)
   const img = u.image;
+  $('svs-rel').disabled = $('svs-file-btn').disabled = busyTask || svsStaging || svsUpdating;
   $('svs-staged').hidden = !img.staged || svsStaging;
   text('svs-src', img.source);
-  text('svs-size', `${img.size.toLocaleString()} of ${d.app_space.toLocaleString()} bytes`);
+  text('svs-size', img.size.toLocaleString() + (d.checked ? ' of ' + d.app_space.toLocaleString() : '') + ' bytes');
   text('svs-sha', img.sha256);
-  $('svs-step2').dataset.state = svsStaging ? 'run' : img.staged ? 'done' : d.checked && d.compatible ? 'run' : 'wait';
 
-  // Step 3: flash
-  $('svs-flash-btn').disabled = !u.can_flash || svsStaging;
-  text('svs-blocker', !busyTask && img.staged && !u.can_flash ? u.blocker : '');
-  $('svs-step3').dataset.state = flashing ? 'run' : u.result_of === 'flashing' ? (u.result_ok ? 'done' : 'fail')
-    : u.can_flash ? 'run' : 'wait';
-  if (u.result_of === 'flashing' && !flashing) setMsg($('svs-flash-msg'), u.result, u.result_ok ? 'ok' : 'bad');
-  else setMsg($('svs-flash-msg'), '');
-  text('svs-fw-state', busyTask ? u.phase + '…' : '');
+  // Update SVS checks the bootloader itself each time; a firmware known not to fit below it waits
+  const fits = !d.checked || img.size <= d.app_space;
+  $('svs-flash-btn').disabled = !s.connected || busyTask || svsStaging || svsUpdating || !img.staged || !fits;
+  const noAnswer = u.result_of === 'checking' && !u.result_ok && !d.checked;  // the bootloader did not answer
+  let msg = '', cls = '';
+  if (busyTask) {
+    // the phase is in the heading
+  } else if (d.checked && !d.compatible) {
+    msg = d.problem; cls = 'bad';
+  } else if (img.staged && !fits) {
+    msg = u.blocker; cls = 'bad';
+  } else if (u.result_of === 'probing') {
+    msg = u.result;
+  } else if (u.result_of !== 'idle' && (u.result_of === 'flashing' || !u.result_ok)) {
+    msg = u.result; cls = u.result_ok ? 'ok' : 'bad';
+  }
+  setMsg($('svs-flash-msg'), msg, cls);
+  // Diagnostics: offered when the bootloader did not answer
+  $('svs-probe').hidden = !(noAnswer || u.task === 'probing' || u.result_of === 'probing');
+  $('svs-probe-btn').disabled = busyTask || !s.connected || svsUpdating;
 
   // The flash itself: over the whole page, as nothing else may be done meanwhile
   if (flashing) {
@@ -1879,22 +1825,16 @@ $('svs-restart-btn').onclick = async () => {
   }
 };
 
-async function svsTask(title, body, ok, path) {
-  if (!await askUser(title, body, ok)) return;
+$('svs-probe-btn').onclick = async () => {
+  if (!await askUser('Run the bootloader diagnostics?',
+                     'The SVS restarts a few times over about 15 seconds. Nothing is written.', 'Run diagnostics')) return;
   try {
-    renderSvs(await post(path));
+    renderSvs(await post('/device/svs/probe'));
     refreshSvs();
   } catch (e) {
-    setMsg($('svs-check-msg'), e.message, 'bad');
+    setMsg($('svs-flash-msg'), e.message, 'bad');
   }
-}
-
-$('svs-check-btn').onclick = () => svsTask('Identify the SVS bootloader?',
-  'The SVS restarts, so video drops for a moment. Nothing is written yet.', 'Restart and check', '/device/svs/check');
-$('svs-preview-btn').onclick = () => svsTask('Preview the vector patch?',
-  'The SVS restarts (video drops for a moment). Nothing is written.', 'Preview', '/device/svs/preview');
-$('svs-probe-btn').onclick = () => svsTask('Run the bootloader diagnostics?',
-  'The SVS restarts a few times over about 15 seconds. Nothing is written.', 'Run diagnostics', '/device/svs/probe');
+};
 
 // The official releases are checked when the menu is opened (the bridge caches
 // them for a minute, as GitHub limits how often it may be asked)
@@ -1974,15 +1914,53 @@ $('svs-file').onchange = async () => {
   }));
 };
 
+// Waits for the bridge's check or preview to end, showing its phase over the page (up to 90 s)
+async function svsTaskDone(title) {
+  const until = Date.now() + 90000;
+  while (Date.now() < until) {
+    await sleep(500);
+    let s;
+    try { s = await api('/device/svs'); } catch (e) { continue; }  // busy: ask again
+    renderSvs(s);
+    if (s.update.task === 'idle') return s;
+    busy({mode: 'spin', title, text: s.update.phase + '…\nDo not unplug the SVS or the bridge.'});
+  }
+  throw new Error('The bridge did not finish checking the SVS');
+}
+
+// Update SVS: every time, the same steps. The bootloader is identified, a vector bootloader has its reset
+// vector patch checked against the chip (both write nothing), and only then is the firmware written.
+// Each step stops the rest if it fails.
 $('svs-flash-btn').onclick = async () => {
   const img = svs.update.image;
-  if (!await askUser(`Flash ${img.source}?`, `SHA-256 ${img.sha256}\n\n` +
-                     'Do not unplug the SVS or the bridge until it finishes.', 'Flash SVS', true)) return;
+  if (!await askUser(`Update the SVS to ${img.source}?`,
+                     'The bridge checks the SVS’s bootloader, writes the firmware and reads it back. The SVS restarts ' +
+                     `a few times, so video drops.\n\nSHA-256 ${img.sha256}\n\nDo not unplug the SVS or the bridge until it finishes.`,
+                     'Update SVS', true)) return;
+  const fail = (title, why) => busy({mode: 'bad', title, text: why + '\n\nNothing was written to the SVS.', actions: [closeAction]});
+  svsUpdating = true;
+  renderSvs(svs);
   try {
+    busy({mode: 'spin', title: 'Identifying the SVS’s bootloader', text: 'Restarting the SVS…'});
+    renderSvs(await post('/device/svs/check'));
+    let s = await svsTaskDone('Identifying the SVS’s bootloader');
+    const d = s.update.device;
+    if (!d.checked || !d.compatible) { fail('The SVS cannot be updated', d.checked ? d.problem : s.update.result); return; }
+    if (d.vector) {
+      busy({mode: 'spin', title: 'Checking the reset vector', text: 'Restarting the SVS…'});
+      renderSvs(await post('/device/svs/preview'));
+      s = await svsTaskDone('Checking the reset vector');
+      if (!s.update.device.vector_verified) { fail('The reset vector did not check out', s.update.result); return; }
+    }
+    if (!s.update.can_flash) { fail('The SVS cannot be updated', s.update.blocker); return; }
+    // From here the progress and the outcome come with the status (renderSvs)
     renderSvs(await post('/device/svs/firmware/flash'));
     refreshSvs();
   } catch (e) {
-    setMsg($('svs-flash-msg'), e.message, 'bad');
+    fail('The SVS cannot be updated', e.message);
+  } finally {
+    svsUpdating = false;
+    if (svs) renderSvs(svs);
   }
 };
 
