@@ -880,13 +880,21 @@ function face(kind, role, o) {
       '<circle cx="62" cy="136" r="13" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="2.4"/><rect x="59" y="124" width="6" height="5" fill="#A7ABB1"/>' +
       '<g fill="#C9A55A"><circle cx="57" cy="133" r="1.6"/><circle cx="67" cy="133" r="1.6"/><circle cx="55" cy="141" r="1.6"/><circle cx="69" cy="141" r="1.6"/></g>' + lab(136, 'S');
   } else if (kind === 'vga') {
+    // HD-15: a D-shaped shell (the wide side to the left), the blue insert with its three staggered
+    // rows of five pin holes, and a hex standoff at each end
     let pins = '';
-    for (const [x, y0] of [[57, 120], [62, 123], [67, 120]]) for (let y = y0; y < y0 + 35; y += 7) pins += `<circle cx="${x}" cy="${y}" r="1.7"/>`;
-    body = '<circle cx="62" cy="32" r="7" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="1.8"/><circle cx="62" cy="32" r="2.8" fill="#2E3238"/>' + lab(32, '3.5') +
-      col([[58, R, 'R'], [84, W, 'L']]) +
-      '<circle cx="62" cy="107" r="5" fill="#A7ABB1"/><circle cx="62" cy="167" r="5" fill="#A7ABB1"/>' +
-      '<path d="M46 113L78 119V155L46 161Z" fill="#A7ABB1"/><path d="M50 118L74 123V151L50 156Z" fill="#2F6FC0"/>' +
-      `<g fill="#1A2C45">${pins}</g>` + lab(137, 'HD-15');
+    for (const [x, y0] of [[56.5, 121], [62, 124.6], [67.5, 121]]) {
+      for (let i = 0; i < 5; i++) pins += `<circle cx="${x}" cy="${y0 + i * 7.2}" r="1.5"/>`;
+    }
+    const hex = (y) => {
+      const pts = [0, 60, 120, 180, 240, 300].map((a) => `${(62 + 5.6 * Math.cos(a * Math.PI / 180)).toFixed(2)},${(y + 5.6 * Math.sin(a * Math.PI / 180)).toFixed(2)}`).join(' ');
+      return `<polygon points="${pts}" fill="#A7ABB1" stroke="#7A7E85" stroke-width="1"/><circle cx="62" cy="${y}" r="2.3" fill="#0B0C0E"/>`;
+    };
+    body = '<circle cx="62" cy="32" r="7.5" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="2"/><circle cx="62" cy="32" r="3" fill="#2E3238"/><circle cx="60.8" cy="30.8" r="0.9" fill="#5A5F68"/>' + lab(32, '3.5') +
+      col([[58, R, 'R'], [84, W, 'L']]) + hex(105) + hex(169) +
+      '<path d="M48 110L76 115V159L48 164Z" fill="#B4B8BE" stroke="#8D9198" stroke-width="2" stroke-linejoin="round"/>' +
+      '<path d="M52 114.5L72 118.4V155.6L52 159.5Z" fill="#2F6FC0" stroke="#22508F" stroke-width="1" stroke-linejoin="round"/>' +
+      `<g fill="#0F1F36">${pins}</g>` + lab(137, 'HD-15');
   } else if (kind === 'dterm') {
     let pins = '';
     for (const x of [59, 63]) for (let y = 103; y < 140; y += 5) pins += `<rect x="${x}" y="${y}" width="2" height="2"/>`;
