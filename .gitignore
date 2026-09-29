@@ -1,5 +1,8 @@
 build/
-managed_components/
+build-tests/
+.ccache/
+src/platform/esp32/managed_components/
+/managed_components/
 sdkconfig
 sdkconfig.old
 
@@ -8,8 +11,5 @@ sdkconfig.old
 .claude/
 eim_config.toml
 
-# Version comes from git/GitVersion in CI (written transiently before the build)
-version.txt
-
-# Python bytecode (host tests, dev server)
+# Python bytecode (dev server)
 __pycache__/

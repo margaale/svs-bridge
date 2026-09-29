@@ -1,0 +1,2410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SVS Bridge</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'%3E%3Ccircle cx='14' cy='14' r='10' fill='none' stroke='%23E8618C' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<style>
+/* Same design as Cruller's page (margaale/Cruller src/web/index.html) */
+:root{--bg:#121315;--panel:#1B1D21;--raised:#23262B;--line:#2E3238;--rule:#26292E;--text:#ECEAE4;--soft:#B3B7BD;--muted:#A3A7AE;--faint:#8A8E95;--accent:#E8618C;--ok:#4CC38A;--warn:#F0B44C;--bad:#F07A74;--blue:#4FB3D9;--well:#0E0F11;
+--sans:'IBM Plex Sans',system-ui,sans-serif;--head:'Chakra Petch','IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 var(--sans)}
+header{display:flex;align-items:center;gap:14px;height:64px;padding:0 24px;border-bottom:1px solid var(--rule)}
+.logo{display:flex;align-items:center;gap:10px;font:700 22px var(--head);letter-spacing:.02em}
+nav.tabs{display:flex;align-self:stretch;gap:4px;margin-left:16px;overflow-x:auto;scrollbar-width:none;min-width:0}
+nav.tabs a{display:flex;align-items:center;padding:0 14px;color:var(--muted);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
+nav.tabs a[aria-current]{color:var(--text);font-weight:600;border-color:var(--accent)}
+.grow{flex-grow:1}
+.chip{display:flex;align-items:center;gap:8px;padding:6px 12px;border:1px solid var(--line);border-radius:999px;font-size:13px;color:#C9CCD1;white-space:nowrap}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--faint);flex:none}
+.dot.ok{background:var(--ok)}.dot.warn{background:var(--warn)}.dot.bad{background:#E0453F}
+main{padding:20px 24px;max-width:1440px;margin:auto}
+[hidden]{display:none!important}
+.panel{background:var(--panel);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+h2{margin:0;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;align-items:center;gap:10px}
+.kv{display:grid;grid-template-columns:minmax(0,1fr) auto;row-gap:8px;column-gap:12px;font-size:14px}
+.kv>:nth-child(odd){color:var(--soft)}.kv>:nth-child(even){font-family:var(--mono);text-align:right;overflow-wrap:anywhere}
+.mono{font-family:var(--mono)}.small{font-size:12px;color:var(--faint)}
+.big{font-size:22px;font-weight:600;font-family:var(--mono)}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
+.span2{grid-column:span 2}.span3{grid-column:span 3}
+.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+button,.btn{font:500 14px var(--sans);color:var(--text);background:transparent;border:1px solid var(--line);border-radius:10px;height:38px;padding:0 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+button.primary,.btn.primary{background:var(--accent);color:#1A0B11;border:0;font-weight:600}
+button.danger{color:var(--bad);border-color:#5A2A28}
+button.primary.danger{background:#D9443E;color:#fff}
+button:disabled{opacity:.5;cursor:default}
+button.link{border:0;color:var(--accent);height:28px;padding:0 6px;font-weight:600}
+input,select{font:14px var(--sans);color:var(--text);background:var(--well);border:1px solid var(--line);border-radius:8px;height:38px;padding:0 10px;width:100%;min-width:0}
+input[readonly]{color:var(--soft)}
+pre,.log{margin:0;background:var(--well);border-radius:8px;padding:10px 12px;font:12px/1.55 var(--mono);color:#C9CCD1;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+a.more{color:var(--accent);text-decoration:none;font-weight:500;font-size:14px}
+.msg{font-size:13px;color:var(--soft);min-height:0}.msg:empty{display:none}
+.msg.ok{color:var(--ok)}.msg.bad{color:var(--bad)}.msg.warn{color:var(--warn)}
+.refresh{flex:none;width:38px;height:38px;padding:0;display:grid;place-items:center}.refresh.spin svg{animation:spin 1.1s linear infinite}
+progress{width:100%;height:8px;accent-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.upd{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:16px}
+/* dialog and full-page overlay */
+dialog#ask{max-width:440px;width:calc(100% - 32px);padding:22px 22px 18px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;box-shadow:0 20px 60px #000a}
+dialog#ask::backdrop{background:#0008;backdrop-filter:blur(2px)}
+dialog#ask h3{margin:0 0 8px;font:700 19px var(--head)}
+dialog#ask p{margin:0 0 18px;font-size:14px;line-height:1.5;color:var(--soft);white-space:pre-line;overflow-wrap:anywhere}
+.busy{position:fixed;inset:0;z-index:50;background:#0c0d0fe6;backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:16px}
+.busy-box{max-width:380px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px}
+.busy h3{margin:6px 0 0;font:700 22px var(--head)}.busy p{margin:0;font-size:15px;line-height:1.5;color:var(--soft);white-space:pre-line;overflow-wrap:anywhere}
+.ring{position:relative;width:120px;height:120px}.ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:6}.ring .track{stroke:#2B2F35}.ring .arc{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:276.5;stroke-dashoffset:0;transition:stroke-dashoffset .6s linear,stroke .3s}
+.ring.spin svg{animation:spin 1.1s linear infinite}.ring.spin .arc{stroke-dashoffset:200;transition:none}
+.ring.ok .arc{stroke:var(--ok)}.ring.bad .arc{stroke:#E0453F}
+.ring>span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:600 30px var(--mono)}
+.ring>#busy-icon{font:600 44px var(--sans)}.ring.ok>#busy-icon{color:var(--ok)}.ring.bad>#busy-icon{color:#E0453F}
+/* SVS tab */
+.svs-now{display:flex;flex-direction:column;align-items:center;padding:12px 0}
+.svs-now>span:first-child{font:700 72px/1 var(--head)}
+.log{height:260px}
+.log .t{color:var(--faint)}.log .tx{color:var(--accent)}.log .ev{color:var(--faint);font-style:italic}.log .empty{color:var(--faint)}
+.switch{display:flex;align-items:center;gap:12px;cursor:pointer;font-size:14px;font-weight:500}
+.switch input{appearance:none;-webkit-appearance:none;width:40px;height:22px;flex:none;border-radius:11px;background:#2B2F35;border:1px solid var(--line);position:relative;padding:0;cursor:pointer;transition:background .15s}
+.switch input::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s,background .15s}
+.switch input:checked{background:#3A1E2A;border-color:var(--accent)}.switch input:checked::after{transform:translateX(18px);background:var(--accent)}
+.note{background:var(--raised);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;color:var(--soft)}
+.note.warn{background:#2A2416;color:#E3CFA3}
+/* Wi-Fi network picker (type to filter, or a hidden network by name) */
+.combo{position:relative;flex:1;min-width:0}
+.combo input{padding-right:40px}
+.combo-toggle{position:absolute;right:2px;top:2px;width:34px;height:34px;padding:0;border:0;color:var(--faint)}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:10;list-style:none;margin:0;padding:4px;max-height:260px;overflow-y:auto;background:var(--raised);border:1px solid var(--line);border-radius:10px;box-shadow:0 12px 32px #0009}
+.combo-list li{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:7px;cursor:pointer;font-size:14px}
+.combo-list li:hover,.combo-list li.active{background:#2B2F35}
+.combo-list .name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.combo-list li.note{color:var(--faint);cursor:default;background:none;padding:9px 10px}
+.lock,.bars{color:var(--faint);flex:none}
+.pw{position:relative;flex:1;min-width:0}.pw input{padding-right:40px}
+.pw button.eye{position:absolute;right:2px;top:2px;width:34px;height:34px;padding:0;border:0;color:var(--faint)}
+.pw button.eye:hover{color:var(--text)}
+.stack{display:flex;flex-direction:column;gap:8px}
+/* Cruller tab */
+.clist{display:flex;flex-direction:column;gap:8px}
+.crow{display:flex;align-items:center;gap:12px;padding:10px 12px;background:var(--raised);border:1px solid var(--line);border-radius:10px}
+.crow.on{background:#3A1E2A;border-color:var(--accent)}
+.crow .cn{font-weight:600;overflow-wrap:anywhere}
+label.lbl{font-size:13px;font-weight:500;color:var(--soft)}
+/* sign-in (create the password / log in) */
+body.auth header nav,body.auth header .chip{display:none}
+.wiz{max-width:430px;margin:auto;display:flex;flex-direction:column;gap:16px;padding-top:6vh}
+.wiz h1{margin:0 0 6px;font:700 26px/32px var(--head)}.wiz p{margin:0;font-size:15px;line-height:22px;color:var(--soft)}
+.wiz input{height:48px;font-size:16px;border-radius:10px}
+.wiz .pw button.eye{width:44px;height:44px}
+button.big{height:52px;font:600 16px var(--sans);border-radius:12px;width:100%}
+/* SVS tab: the switch, as a row of modules (outputs | control | inputs) */
+.cfgbar{flex-direction:row;align-items:center;gap:16px}
+.cfgbar>svg{flex:none;color:var(--muted)}
+.cfgbar.warn{background:#2A2416}.cfgbar.warn>svg{color:var(--warn)}
+.cfg-text{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.cfg-text b{font-weight:600;font-size:14px}.cfg-text span{font-size:13px;color:var(--soft)}
+.stack-row{display:flex;align-items:stretch;gap:10px;overflow-x:auto;padding:2px 2px 6px}
+.sgroup{flex:1 0 auto;display:flex;flex-direction:column;gap:10px}
+.sgroup.outs{align-items:flex-end}.sgroup.ins{align-items:flex-start}.sgroup.ctl{flex:none;align-items:center}
+.sgroup h2.out{color:var(--blue)}.sgroup h2.ctl{color:var(--accent)}
+.ssep{width:1px;background:var(--line);flex:none}
+.shead{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.stiles{display:flex;gap:8px;align-items:stretch}
+button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;padding:8px 4px;border-radius:12px;background:var(--raised);white-space:normal;user-select:none;-webkit-user-select:none}
+.mod svg{width:64px;height:114px;display:block;pointer-events:none}
+.mod .mk{font:600 11px var(--mono);color:#C9CCD1;display:flex;align-items:center;gap:4px}
+.mod .mn{font-size:12px;color:var(--soft);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mod .mn.none{color:#6B6F76}
+.mod .led{width:9px;height:9px;border-radius:50%;background:#33363B;box-shadow:inset 0 0 0 1px #0007;flex:none}
+.mod .led.g.on{background:var(--ok);box-shadow:0 0 8px 1px var(--ok)}
+.mod .led.ph{visibility:hidden}  /* no light on this module: keeps the room, so the tiles line up */
+.mod .led.b.on{background:var(--blue);box-shadow:0 0 8px 1px var(--blue)}
+.mod .led.r.on{background:#E0453F;box-shadow:0 0 8px 1px #E0453F}
+.mod.pend .mk,.mod.pend .mn{font-style:italic}  /* changes not saved to the SVS yet */
+.mod.sel{background:#3A1E2A;border-color:var(--accent)}
+.mod.dragging{position:relative;z-index:5;box-shadow:0 12px 28px #000a;cursor:grabbing;transition:none}
+.mod.drop{outline:2px dashed var(--accent);outline-offset:2px}
+.mod.add{border-style:dashed;background:transparent;color:var(--blue);border-color:#2F5F72;justify-content:center;font-size:12px}
+.vdot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.insp{flex-direction:row;gap:22px}
+.insp-face{flex:none;width:150px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.insp-face svg{width:132px;height:236px}
+.insp-body{flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:18px}
+.insp-body h3{margin:0;font:700 22px var(--head)}
+.pick{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.pick button{height:auto;flex-direction:column;gap:6px;padding:10px 6px;border-radius:10px;background:var(--raised);white-space:normal;min-width:0}
+.pick button svg{width:48px;height:86px}
+.pick b{font-size:12px;text-align:center;line-height:1.25}.pick small{font-size:11px;color:var(--faint);text-align:center;font-weight:400;line-height:1.3}
+.pick button[aria-checked=true]{background:#3A1E2A;border-color:var(--accent)}
+.pick.out button[aria-checked=true]{background:#16303A;border-color:var(--blue)}
+.detected{display:flex;align-items:center;gap:14px;padding:12px 14px;background:#16301F;border:1px solid #2A5A3C;border-radius:10px}
+.detected svg{width:40px;height:72px;flex:none}
+.opts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 24px;padding:14px 16px;background:var(--raised);border-radius:10px}
+.opts .switch{align-items:flex-start}.opts .switch input{margin-top:1px}
+.opts .switch.off{opacity:.6}
+.hint{display:block;font-size:12px;font-weight:400;color:var(--faint)}
+.chg{font-size:11px;font-weight:600;color:var(--warn);margin-left:6px}
+.irs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-height:34px}
+.ir{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 4px 0 12px;border-radius:999px;background:var(--panel);border:1px solid var(--line);font-size:13px;font-weight:500}
+.ir .mono{font-size:12px;color:var(--faint)}
+.ir button{width:26px;height:26px;padding:0;border:0;border-radius:50%;color:var(--faint)}
+.irbox{display:flex;flex-direction:column;gap:10px;padding:14px 16px;background:var(--raised);border-radius:10px}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:1000px){.grid3{grid-template-columns:minmax(0,1fr)}.span2,.span3{grid-column:auto}.upd{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){.insp{flex-direction:column}.insp-face{width:auto}.pick{grid-template-columns:repeat(3,minmax(0,1fr))}.opts,.two{grid-template-columns:minmax(0,1fr)}.cfgbar{flex-wrap:wrap}header{padding:0 12px;gap:8px}body:not(.auth) .logo span{display:none}nav.tabs{margin-left:0}nav.tabs a{padding:0 8px}.hide-sm{display:none}main{padding:16px}}
+</style>
+</head>
+<body class="auth">
+<header>
+<div class="logo"><svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#E8618C" stroke-width="4" aria-hidden="true"><circle cx="14" cy="14" r="10"/></svg><span>SVS Bridge</span></div>
+<nav class="tabs" aria-label="Sections"><a href="#svs" data-tab="svs">SVS</a><a href="#cruller" data-tab="cruller">Cruller</a><a href="#bridge" data-tab="bridge">Bridge</a><a href="#ha" data-tab="ha">Home Assistant</a></nav>
+<div class="grow"></div>
+<div class="chip hide-sm" id="chip-svs"><span class="dot" id="svs-dot"></span><span id="svs-chip">Connecting…</span></div>
+<div class="chip hide-sm" id="chip-wifi" hidden><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M2 9a15 15 0 0 1 20 0"/><path d="M5.5 12.5a10 10 0 0 1 13 0"/><path d="M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".8"/></svg><span id="wifi-chip"></span></div>
+<div class="chip mono hide-sm" id="chip-ver" hidden></div>
+</header>
+
+<main>
+<!-- Sign-in: shown until logged in -->
+<section id="create" class="wiz" hidden>
+<div><h1>Create the admin password</h1><p>You will use it to log in to the bridge. At least 8 characters.</p></div>
+<form id="create-form" class="stack">
+<input type="text" name="username" value="admin" autocomplete="username" hidden>
+<label class="lbl" for="new-pw">Password</label>
+<input type="password" id="new-pw" autocomplete="new-password" minlength="8" maxlength="64">
+<label class="lbl" for="new-pw2">Repeat password</label>
+<input type="password" id="new-pw2" autocomplete="new-password" minlength="8" maxlength="64">
+<div class="msg" id="create-msg"></div>
+<button type="submit" class="primary big">Continue</button>
+</form>
+</section>
+
+<section id="login" class="wiz" hidden>
+<div><h1>Log in</h1><p>Enter the bridge's admin password.</p></div>
+<form id="login-form" class="stack">
+<input type="text" name="username" value="admin" autocomplete="username" hidden>
+<label class="lbl" for="login-pw">Admin password</label>
+<input type="password" id="login-pw" autocomplete="current-password" maxlength="64">
+<div class="msg" id="login-msg"></div>
+<button type="submit" class="primary big">Log in</button>
+</form>
+<div class="small">Forgot it? Hold the BOOT button for 10 s to erase all settings.</div>
+</section>
+
+<!-- SVS -->
+<section data-view="svs" class="grid3" hidden>
+<div class="panel span3 cfgbar" id="cfg-bar">
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7H6a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h3"/><path d="M15 7h3a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-3"/><path d="M8 12h8"/></svg>
+<div class="cfg-text"><b id="cfg-title">Settings stored in the SVS</b><span id="cfg-sub"></span><progress id="cfg-prog" max="100" hidden></progress><div class="msg" id="cfg-msg"></div></div>
+<button type="button" id="cfg-read" hidden>Read from the SVS</button>
+<button type="button" class="primary" id="cfg-write" hidden>Save to the SVS</button>
+</div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Your switch</h2><span class="small hide-sm" id="stack-hint">Drag a module to move it: inputs among inputs; outputs and transcoders among outputs</span></div>
+<div class="note warn" id="stack-warn" hidden></div>
+<div class="stack-row" id="stack"></div>
+<div class="msg" id="layout-msg"></div>
+</div>
+
+<div class="panel span2 insp" id="insp" aria-live="polite"></div>
+
+<div class="panel">
+<div class="row"><h2 class="grow">Active input</h2><span class="dot" id="v-dot"></span><span class="small" id="v-state">–</span></div>
+<div class="svs-now"><span id="v-input">–</span><span id="v-sub" class="small"></span></div>
+<div class="stack" id="nav" style="gap:8px">
+<div class="row"><button type="button" style="flex:1 1 0" id="nav-prev">&#9664; Previous</button><button type="button" style="flex:1 1 0" id="nav-next">Next &#9654;</button></div>
+<div class="row"><button type="button" style="flex:1 1 0" id="nav-seekprev" title="Previous input that has a signal">&#9664; Seek</button><button type="button" style="flex:1 1 0" id="nav-seeknext" title="Next input that has a signal">Seek &#9654;</button></div>
+<div class="row"><select id="nav-input" class="grow" style="width:auto" aria-label="Input to switch to"></select><button type="button" id="nav-go">Go</button></div>
+<div class="row"><span class="small grow">Attract mode</span><button type="button" id="nav-attr-on">On</button><button type="button" id="nav-attr-off">Off</button></div>
+<div class="msg" id="nav-msg"></div>
+<div class="small" id="nav-hint"></div>
+</div>
+<div class="small">The bridge reports the active input to Home Assistant, and to a Cruller on the same network.</div>
+</div>
+
+<div class="panel span2">
+<div class="row"><h2 class="grow">Serial log</h2><span class="small hide-sm">everything the SVS sends, and what the bridge sends it</span><button type="button" class="link" id="svs-log-clear">Clear</button></div>
+<div class="log" id="svs-log" role="log" aria-live="polite"></div>
+<form id="svs-send-form" class="row" autocomplete="off" hidden>
+<input type="text" id="svs-cmd" class="mono" maxlength="128" placeholder="Command, e.g. SVS_Input_Up" aria-label="Command to send to the SVS">
+<button type="submit" class="primary" id="svs-send-btn">Send</button>
+</form>
+<div class="msg" id="svs-send-msg"></div>
+</div>
+
+<div class="panel">
+<h2>Control</h2>
+<div class="note" id="svs-mode-hint"></div>
+<div class="grow"></div>
+<button id="svs-restart-btn">Restart SVS</button>
+<div class="msg" id="svs-restart-msg"></div>
+</div>
+
+<div class="panel span3" id="svs-fw-section" hidden>
+<div class="row"><h2 class="grow">SVS firmware</h2><span class="small" id="svs-fw-state"></span></div>
+<div class="small" id="svs-fw-now"></div>
+<div class="row" style="flex-wrap:wrap">
+<select id="svs-rel" class="grow" style="width:auto"><option value="">Official releases…</option></select>
+<button id="svs-file-btn">Or a .hex file…</button>
+<input type="file" id="svs-file" accept=".hex" hidden>
+</div>
+<div class="msg" id="svs-msg"></div>
+<div class="kv" id="svs-staged" hidden><span>Firmware</span><span id="svs-src"></span><span>Size</span><span id="svs-size"></span><span>SHA-256</span><span id="svs-sha" class="small"></span></div>
+<div class="row" style="flex-wrap:wrap"><button class="primary danger" id="svs-flash-btn" disabled>Update SVS</button>
+<span class="small grow">The bridge checks the SVS’s bootloader, writes the firmware and reads it back. The SVS restarts a few times: video drops.</span></div>
+<div class="msg" id="svs-flash-msg"></div>
+<div id="svs-probe" class="stack" hidden>
+<div class="small">The diagnostics restart the SVS a few times, trying to reach its bootloader with other timings and speeds, and write what they find to the serial log. Nothing is written to the SVS.</div>
+<div><button id="svs-probe-btn">Diagnose bootloader</button></div>
+</div>
+</div>
+</section>
+
+<!-- Cruller -->
+<section data-view="cruller" class="grid3" hidden>
+<div class="panel span2">
+<div class="row"><h2 class="grow">Crullers on the network</h2><button type="button" class="refresh" id="cr-scan" aria-label="Look again" title="Look again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></div>
+<div class="clist" id="cr-list"></div>
+<div class="small" id="cr-empty" hidden>No Cruller found yet. Check that it is on and on the same network as the bridge.</div>
+<div class="msg" id="cr-msg"></div>
+</div>
+
+<div class="panel">
+<div class="row"><h2 class="grow">Reports</h2><span class="dot" id="cr-dot"></span></div>
+<div style="font-size:20px;font-weight:600" id="cr-state">–</div>
+<div class="kv"><span>Reporting to</span><span id="cr-to">–</span><span>Last report</span><span id="cr-last">–</span><span>Accepted</span><span id="cr-count">–</span></div>
+<div class="note warn" id="cr-err" hidden></div>
+</div>
+
+<div class="panel span3">
+<h2>How it works</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">The RetroTINK 4K cannot tell Cruller when the switch changes input, so the bridge does. Pick the Cruller connected to the RetroTINK this switch feeds: the bridge sends it the active input on every change, when it finds it (also after it restarts) and every minute. Cruller then applies only the game profile of the console on screen.</div>
+<div class="small">A Cruller takes reports from the first bridge that sends them. To move it to another bridge, press Unpair in its Cruller tab. Crullers announce themselves over mDNS as <span class="mono">_rt4k._tcp</span>; the bridge remembers the one you pick by its id, so its address may change.</div>
+</div>
+</section>
+
+<!-- Bridge -->
+<section data-view="bridge" class="grid3" hidden>
+<div class="panel">
+<h2>This bridge</h2>
+<div class="row" style="align-items:baseline"><span class="big" id="f-ver">–</span><span class="small" id="f-part"></span></div>
+<div class="kv"><span>Up for</span><span id="f-up">–</span><span>Last start</span><span id="f-boot">–</span><span>Built</span><span id="f-built">–</span></div>
+<div class="grow"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<button id="reboot-btn">Restart</button>
+<button class="danger" id="reset-btn">Factory reset</button>
+</div>
+<button id="logout-btn">Log out</button>
+<div class="msg" id="device-msg"></div>
+</div>
+
+<div class="panel">
+<h2>Wi-Fi</h2>
+<div class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:600" id="w-ssid">–</span><span class="small" id="w-rssi"></span></div>
+<div class="kv"><span>Address</span><span id="w-host">–</span><span>IP</span><span id="w-ip">–</span><span>State</span><span id="w-state">–</span></div>
+<div class="grow"></div>
+<button type="button" id="wifi-change">Change network</button>
+<form id="wifi-form" class="stack" autocomplete="off" hidden>
+<div class="row">
+<div class="combo">
+<input type="text" id="ssid" autocomplete="off" maxlength="32" placeholder="Choose or type a network" role="combobox" aria-controls="ssid-list" aria-autocomplete="list">
+<button type="button" class="combo-toggle" id="ssid-toggle" aria-label="Show networks"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+<ul class="combo-list" id="ssid-list" role="listbox" hidden></ul>
+</div>
+<button type="button" class="refresh" id="scan-btn" aria-label="Scan again" title="Scan again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
+</div>
+<input type="password" id="password" autocomplete="off" maxlength="63" placeholder="Password">
+<button type="submit" class="primary" id="wifi-btn">Connect</button>
+</form>
+<div class="msg" id="wifi-msg"></div>
+</div>
+
+<div class="panel">
+<h2>HTTPS certificate</h2>
+<div class="row" style="align-items:baseline"><span style="font-size:20px;font-weight:600" id="st-tls">–</span></div>
+<div class="small">SHA-256 fingerprint</div>
+<div class="mono small" id="st-fp" style="overflow-wrap:anywhere;color:var(--soft)">–</div>
+<div class="small">Browsers warn about the self-signed certificate once. For scripts, download it and trust or pin it.</div>
+<div class="grow"></div>
+<a class="btn" href="/device/cert">Download certificate</a>
+</div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Bridge firmware</h2><span class="small" id="fw-state">–</span></div>
+<div class="upd">
+<div class="stack">
+<div class="row"><select id="fw-rel" class="grow"><option value="">Loading…</option></select><button class="refresh" id="fw-refresh" title="Check GitHub again" aria-label="Check GitHub again"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button></div>
+<button class="primary" id="fw-gh-btn" disabled>Download and install</button>
+<button id="fw-file-btn">Install from a file…</button>
+<input type="file" id="fw-file" accept=".bin" hidden>
+<div class="msg" id="fw-msg"></div>
+</div>
+<div class="stack">
+<div class="note">The bridge downloads the firmware straight from GitHub, checks it (ESP32-S3, project <span class="mono">svs_bridge</span>, checksum) and restarts into it. It keeps the new version only once it reconnects to the Wi-Fi; otherwise it goes back to the current one by itself.</div>
+<div class="kv"><span>Running</span><span id="fw-current">–</span><span>Release notes</span><span><a class="more" id="fw-notes" href="https://github.com/margaale/svs-bridge/releases" target="_blank" rel="noopener">github.com/margaale/svs-bridge</a></span></div>
+</div>
+</div>
+</div>
+
+<div class="panel span3">
+<div class="row"><h2 class="grow">Serial console clients (RFC 2217)</h2><span class="small" id="cl-n">–</span></div>
+<div class="clist" id="cl-list"></div>
+<div class="small" id="cl-empty">No client connected. Connect to <span class="mono">rfc2217://svs-bridge.local:2217</span> (e.g. pyserial): clients see what the SVS says, and the lines they send go to the SVS.</div>
+<div class="note" id="cl-listen" hidden>What these clients send reaches the SVS only with the RetroTINK's HD-15 unplugged: the SVS shares that line.</div>
+<div class="small">Each connection, what it sends and why a line was not passed on also go to the SVS tab's serial log.</div>
+</div>
+</section>
+
+<!-- Home Assistant -->
+<section data-view="ha" class="grid3" hidden>
+<div class="panel span2">
+<h2>API token</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">Home Assistant discovers the bridge on your network by itself. Paste this token when adding it, so it can read the SVS state.</div>
+<div class="row"><input type="password" id="api-token" class="mono" readonly value="…"><button type="button" id="api-copy-btn">Copy</button><button type="button" class="danger" id="api-regen-btn">Regenerate</button></div>
+<div class="small">Regenerating revokes the old token: update it in Home Assistant afterwards.</div>
+<div class="msg" id="api-msg"></div>
+</div>
+<div class="panel">
+<h2>Integration</h2>
+<div class="small" style="font-size:14px;color:var(--soft)">The custom integration installs through HACS.</div>
+<a class="more" href="https://github.com/margaale/svs-bridge-hacs" target="_blank" rel="noopener">github.com/margaale/svs-bridge-hacs →</a>
+</div>
+<div class="panel span3">
+<h2>API</h2>
+<div class="kv"><span><span class="mono">GET /api/v1/info</span></span><span style="font-family:var(--sans);color:var(--soft)">id, name, model, firmware</span><span><span class="mono">GET /api/v1/state</span></span><span style="font-family:var(--sans);color:var(--soft)">SVS state and bridge diagnostics</span></div>
+<div class="small">Both take an <span class="mono">Authorization: Bearer &lt;token&gt;</span> header. The bridge advertises itself over mDNS as <span class="mono">_svsbridge._tcp</span>.</div>
+</div>
+</section>
+</main>
+
+<div id="busy" class="busy" hidden role="status" aria-live="polite">
+<div class="busy-box">
+<div class="ring" id="busy-ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="44" class="track"/><circle cx="50" cy="50" r="44" class="arc" id="busy-arc"/></svg><span id="busy-num"></span><span id="busy-icon"></span></div>
+<h3 id="busy-title"></h3>
+<p id="busy-text"></p>
+<div id="busy-actions" class="row" style="justify-content:center"></div>
+</div>
+</div>
+<dialog id="ask" aria-labelledby="ask-title">
+<form method="dialog">
+<h3 id="ask-title"></h3>
+<p id="ask-text"></p>
+<div class="row" style="justify-content:flex-end"><button value="no" id="ask-no">Cancel</button><button value="yes" id="ask-yes" class="primary">OK</button></div>
+</form>
+</dialog>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const text = (id, t) => { $(id).textContent = t; };
+const LOCK = '<svg class="lock" viewBox="0 0 16 16" width="12" height="12" aria-label="secured"><path fill="currentColor" ' +
+  'd="M8 1a3.5 3.5 0 0 0-3.5 3.5V7H4a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1h-.5V4.5A3.5 3.5 0 0 0 8 1zm2 6H6V4.5a2 2 0 1 1 4 0V7z"/></svg>';
+let status = null;
+let svs = null;
+let svsStaging = false;  // a chosen SVS firmware is being downloaded / checked
+let svsUpdating = false;  // Update SVS is checking the bootloader, before the flash starts
+
+// Eye button inside every password field to show / hide what was typed
+const EYE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 ' +
+  '11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
+  'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 ' +
+  '10.07 0 0 1 12 19c-7 0-11-7-11-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 ' +
+  '0 1 12 4c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/>' +
+  '<line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
+function addPasswordToggles() {
+  for (const input of document.querySelectorAll('input[type=password]')) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pw';
+    input.parentNode.insertBefore(wrap, input);
+    wrap.appendChild(input);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'eye';
+    btn.innerHTML = EYE;
+    btn.setAttribute('aria-label', 'Show password');
+    btn.onclick = () => {
+      const show = input.type === 'password';
+      input.type = show ? 'text' : 'password';
+      btn.innerHTML = show ? EYE_OFF : EYE;
+      btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    };
+    wrap.appendChild(btn);
+  }
+}
+addPasswordToggles();
+
+function setMsg(el, t, cls) {
+  el.textContent = t;
+  el.className = 'msg ' + (cls || '');
+}
+
+function esc(t) {
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+// Throws an Error carrying the HTTP status and the server's message. A 401
+// means the session is gone (e.g. after a reboot): back to the login form.
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body_ = await res.text();
+  let body;
+  try { body = JSON.parse(body_); } catch (e) { body = {error: body_}; }
+  if (!res.ok) {
+    if (res.status === 401 && path !== '/device/login') showAuth('login');
+    const err = new Error(body.error || res.statusText);
+    err.status = res.status;
+    err.retryAfter = body.retry_after;
+    throw err;
+  }
+  return body;
+}
+
+function post(path, data) {
+  return api(path, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data || {}),
+  });
+}
+
+// A confirmation in the page's own style (native confirm() does not work in
+// the app's browser pane): resolves true on OK.
+function askUser(title, body, ok, danger) {
+  const d = $('ask');
+  text('ask-title', title);
+  text('ask-text', body || '');
+  text('ask-yes', ok || 'OK');
+  $('ask-yes').className = 'primary' + (danger ? ' danger' : '');
+  d.returnValue = '';
+  d.showModal();
+  $('ask-no').focus();
+  return new Promise((resolve) => d.addEventListener('close', () => resolve(d.returnValue === 'yes'), {once: true}));
+}
+
+// A full-page overlay for long operations: a ring that spins (waiting), fills
+// (progress, frac 0..1), or shows how it ended (ok / bad), with a title, a
+// line of text and optional buttons.
+const ARC = 276.5;  // the ring's circumference (r = 44)
+
+function busy(o) {
+  const ring = $('busy-ring'), arc = $('busy-arc');
+  $('busy').hidden = false;
+  text('busy-title', o.title || '');
+  text('busy-text', o.text || '');
+  ring.className = 'ring' + (o.mode === 'spin' ? ' spin' : o.mode === 'ok' ? ' ok' : o.mode === 'bad' ? ' bad' : '');
+  text('busy-num', '');
+  text('busy-icon', o.mode === 'ok' ? '✓' : o.mode === 'bad' ? '!' : '');
+  arc.style.strokeDashoffset = '';
+  if (o.mode === 'progress') {
+    const f = Math.min(1, Math.max(0, o.frac || 0));
+    arc.style.strokeDashoffset = ARC * (1 - f);
+    text('busy-num', Math.round(100 * f) + '%');
+  }
+  const acts = $('busy-actions');
+  acts.textContent = '';
+  for (const a of o.actions || []) {
+    const b = a.href ? document.createElement('a') : document.createElement('button');
+    b.textContent = a.label;
+    b.className = (a.href ? 'btn ' : '') + (a.primary ? 'primary' : '');
+    if (a.href) b.href = a.href;
+    if (a.onclick) b.onclick = a.onclick;
+    acts.appendChild(b);
+  }
+}
+
+function busyHide() { $('busy').hidden = true; }
+const closeAction = {label: 'Close', onclick: busyHide};
+
+function duration(seconds) {
+  const d = Math.floor(seconds / 86400), h = Math.floor(seconds / 3600) % 24;
+  const m = Math.floor(seconds / 60) % 60, s = seconds % 60;
+  return d ? `${d} d ${h} h` : h ? `${h} h ${m} min` : m ? `${m} min ${s} s` : `${s} s`;
+}
+
+// --- Sign-in and tabs -------------------------------------------------------
+
+let signedIn = false;
+
+function showAuth(view) {
+  const wasIn = signedIn;
+  signedIn = view === 'app';
+  document.body.classList.toggle('auth', !signedIn);
+  $('create').hidden = view !== 'create';
+  $('login').hidden = view !== 'login';
+  if (view === 'login' && wasIn) $('login-pw').focus();
+  route();
+  if (signedIn) { refresh(); loadLayout(); refreshSvs(); startLog(); loadApiToken(); wsConnect(); }
+  else wsDrop();
+}
+
+let tab = 'svs';
+
+function route() {
+  const t = location.hash.slice(1);
+  tab = ['svs', 'cruller', 'bridge', 'ha'].includes(t) ? t : 'svs';
+  for (const e of document.querySelectorAll('[data-view]')) e.hidden = !signedIn || e.dataset.view !== tab;
+  for (const a of document.querySelectorAll('nav.tabs a')) a.toggleAttribute('aria-current', a.dataset.tab === tab);
+  $('chip-svs').hidden = tab === 'bridge';
+  $('chip-wifi').hidden = $('chip-ver').hidden = !$('chip-svs').hidden;
+  if (signedIn && tab === 'bridge') { fwLoadReleases(); refreshClients(); }
+  if (signedIn && tab === 'cruller') refreshCruller();
+}
+addEventListener('hashchange', route);
+
+// --- Home Assistant API token ----------------------------------------------
+
+async function loadApiToken() {
+  try { $('api-token').value = (await api('/device/api-token')).token; }
+  catch (e) { /* not logged in, or busy */ }
+}
+
+$('api-copy-btn').onclick = async () => {
+  const token = $('api-token').value;
+  try {
+    await navigator.clipboard.writeText(token);
+    setMsg($('api-msg'), 'Token copied to the clipboard', 'ok');
+  } catch (e) {
+    // Clipboard needs a secure context/permission; fall back to selecting it
+    const input = $('api-token'), was = input.type;
+    input.type = 'text'; input.select();
+    setMsg($('api-msg'), 'Copy the selected token (Ctrl+C)', '');
+    input.type = was;
+  }
+};
+
+$('api-regen-btn').onclick = async () => {
+  if (!await askUser('Regenerate the API token?', 'Home Assistant stops reading the bridge until you give it the new one.',
+                     'Regenerate', true)) return;
+  try {
+    $('api-token').value = (await post('/device/api-token/regenerate')).token;
+    setMsg($('api-msg'), 'New token generated. Update it in Home Assistant.', 'ok');
+  } catch (err) {
+    setMsg($('api-msg'), err.message, 'bad');
+  }
+};
+
+$('create-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const pw = $('new-pw').value;
+  if (pw.length < 8) { setMsg($('create-msg'), 'Use at least 8 characters', 'bad'); return; }
+  if (pw !== $('new-pw2').value) { setMsg($('create-msg'), 'The passwords do not match', 'bad'); return; }
+  try {
+    await post('/device/setup-password', {password: pw});
+    showAuth('app');
+  } catch (err) {
+    if (err.status === 409) { showAuth('login'); return; }
+    setMsg($('create-msg'), err.message, 'bad');
+  }
+};
+
+$('login-form').onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await post('/device/login', {password: $('login-pw').value});
+    $('login-pw').value = '';
+    setMsg($('login-msg'), '');
+    showAuth('app');
+  } catch (err) {
+    const t = err.status === 429
+      ? `Too many attempts. Try again in ${err.retryAfter} s.` : err.message;
+    setMsg($('login-msg'), t, 'bad');
+  }
+};
+
+$('logout-btn').onclick = async () => {
+  try { await post('/device/logout'); } catch (e) { /* ignore */ }
+  showAuth('login');
+};
+
+// --- Bridge status ----------------------------------------------------------
+
+let statusAt = 0;
+
+function render(s) {
+  status = s;
+  statusAt = Date.now();
+  const w = s.wifi, fw = s.firmware;
+  text('chip-ver', 'v' + fw.version);
+  text('wifi-chip', w.connected ? w.ssid + ' · ' + w.rssi + ' dBm' : 'Wi-Fi not connected');
+  text('w-ssid', w.ssid || '–');
+  text('w-rssi', w.connected ? w.rssi + ' dBm' : '');
+  text('w-host', w.hostname);
+  text('w-ip', w.connected ? w.ip : '–');
+  $('w-state').innerHTML = w.connected ? '<span class="ok">connected</span>'
+    : '<span class="bad">' + (w.ssid ? 'trying to connect' : 'not connected') + '</span>';
+  text('f-ver', fw.version);
+  text('f-part', 'partition ' + fw.partition);
+  text('f-built', fw.built);
+  text('f-boot', fw.reset_reason);
+  $('f-boot').className = /crash|watchdog|brownout|glitch|lockup/.test(fw.reset_reason) ? 'bad' : '';
+  text('fw-current', `${fw.project} ${fw.version}`);
+  text('st-tls', s.tls.source === 'custom' ? 'Custom' : 'Self-signed');
+  text('st-fp', s.tls.fingerprint);
+  showUptime();
+}
+
+function showUptime() {
+  if (status) text('f-up', duration(status.firmware.uptime_s + Math.floor((Date.now() - statusAt) / 1000)));
+}
+setInterval(showUptime, 1000);
+
+async function refresh() {
+  try { render(await api('/api/status')); } catch (e) { /* device busy or rebooting */ }
+  if (tab === 'bridge') refreshClients();
+}
+
+// --- RFC 2217 clients (Bridge tab) -------------------------------------------
+
+function bytes(n) {
+  return n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB';
+}
+
+async function refreshClients() {
+  let c;
+  try { c = await api('/device/clients'); } catch (e) { return; }
+  const list = $('cl-list');
+  list.textContent = '';
+  text('cl-n', c.clients.length + ' of ' + c.max + ' connected');
+  $('cl-empty').hidden = c.clients.length > 0;
+  for (const k of c.clients) {
+    const row = document.createElement('div');
+    row.className = 'crow';
+    const cmds = k.commands + ' command' + (k.commands === 1 ? '' : 's') + ' sent' +
+      (k.refused ? ', <span class="warn">' + k.refused + ' not sent</span>' : '');
+    row.innerHTML = `<div class="grow" style="min-width:0"><div class="cn mono">${esc(k.ip)}:${k.port}</div>` +
+      `<div class="small">connected ${duration(k.connected_s)} · last heard ${k.idle_s ? duration(k.idle_s) + ' ago' : 'now'} · ` +
+      `${bytes(k.rx)} in, ${bytes(k.tx)} out · ${cmds}</div></div>`;
+    list.appendChild(row);
+  }
+  $('cl-listen').hidden = !c.clients.length;
+}
+
+// --- SVS --------------------------------------------------------------------
+
+// Input controls (the same commands as the official utility's buttons). The firmware that has each:
+// Previous, Next and Go to 1.12; Seek and Attract mode 1.14. Whether attract mode is on cannot be read.
+function fwNumber(s) {
+  const m = /(\d+)\.(\d+)/.exec(s.firmware || '');
+  return m ? +m[1] * 100 + +m[2] : null;  // null: not reported yet
+}
+
+let navInputs = -1;  // inputs the picker was built for
+function renderNav(s) {
+  const fw = fwNumber(s);
+  const idle = s.update.task === 'idle';
+  const can = (min) => s.connected && idle && (fw === null || fw >= min);
+  for (const id of ['nav-prev', 'nav-next', 'nav-input', 'nav-go']) $(id).disabled = !can(112);
+  for (const id of ['nav-seekprev', 'nav-seeknext', 'nav-attr-on', 'nav-attr-off']) $(id).disabled = !can(114);
+  text('nav-hint', s.connected && fw !== null && fw < 114
+    ? 'Firmware ' + s.firmware.replace(/^SVS_FW_/, '') + ' has no Seek or Attract mode (1.14).' : '');
+
+  const n = s.total_inputs > 0 ? s.total_inputs : 0;
+  const pick = $('nav-input');
+  if (navInputs !== n) {
+    navInputs = n;
+    const keep = pick.value;
+    pick.innerHTML = '';
+    for (let i = 1; i <= n; i++) {
+      const o = document.createElement('option');
+      o.value = String(i);
+      const name = layout && layout.inputs && layout.inputs[i - 1] && layout.inputs[i - 1].name;
+      o.textContent = 'Input ' + i + (name ? ' · ' + name : '');
+      pick.appendChild(o);
+    }
+    pick.insertAdjacentHTML('beforeend', '<option value="0">No input</option>');
+    pick.value = keep && [...pick.options].some((o) => o.value === keep) ? keep : n ? '1' : '0';
+  }
+}
+
+async function navSend(command) {
+  try {
+    await svsSend(command);
+    setMsg($('nav-msg'), '');
+    if (!wsLive) {  // the socket brings the answer by itself
+      pollLog();
+      setTimeout(pollLog, 350);  // the SVS answers within ~100 ms: show the new input without waiting for the timer
+    }
+  } catch (err) {
+    setMsg($('nav-msg'), err.message, 'bad');
+  }
+}
+
+for (const [id, command] of [['nav-prev', 'SVS_Input_Down'], ['nav-next', 'SVS_Input_Up'],
+    ['nav-seekprev', 'SVS_Input_Seek_Down'], ['nav-seeknext', 'SVS_Input_Seek_Up'],
+    ['nav-attr-on', 'SVS_Attract_ON'], ['nav-attr-off', 'SVS_Attract_OFF']]) {
+  $(id).onclick = () => navSend(command);
+}
+$('nav-go').onclick = () => navSend('SVS_Change_Input_' + $('nav-input').value);
+
+function renderSvs(s) {
+  svs = s;
+  // Only ever what a connected SVS has reported (there is no command to ask for
+  // it); nothing is kept once the SVS is unplugged. Input 0 is "no input".
+  const known = s.connected && s.current_input != null;
+  const input = !known ? '–' : s.current_input === 0 ? '0' : String(s.current_input);
+  text('svs-chip', !s.connected ? 'SVS not connected' : 'SVS · ' + (!known ? 'input unknown' : s.current_input === 0 ? 'no input' : 'input ' + input));
+  $('svs-dot').className = 'dot ' + (!s.connected ? 'bad' : known ? 'ok' : 'warn');
+  $('v-dot').className = $('svs-dot').className;
+  text('v-state', !s.connected ? 'not connected' : known ? 'live' : 'waiting for the SVS');
+  text('v-input', input);
+  text('v-sub', !s.connected ? 'plug the SVS into the bridge' : !known ? 'reported when the input changes'
+    : s.current_input === 0 ? 'no input selected' : s.total_inputs ? 'of ' + s.total_inputs + ' inputs' : '');
+
+  const name = s.current_input > 0 && s.current_input_name;
+  if (known && name) text('v-sub', name);
+  renderSwitch();
+
+  // Sending always works with an SVS attached; what it needs is the RetroTINK's
+  // HD-15 unplugged (the SVS shares that line). Restarting (a DTR pulse) does not.
+  text('svs-mode-hint', !s.connected
+    ? 'Plug the SVS into the bridge\'s USB port.'
+    : 'Commands, settings and firmware updates reach the SVS only with the RetroTINK\'s HD-15 unplugged: '
+      + 'the SVS shares that line. Restarting it works either way.');
+  $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
+  renderNav(s);
+  $('svs-send-form').hidden = !s.connected;
+  $('svs-fw-section').hidden = !s.connected;
+
+  const u = s.update;
+  const d = u.device;
+  const busyTask = u.task !== 'idle';
+  const flashing = u.task === 'flashing';
+
+  // What runs now, and the bootloader once the first update has identified it
+  text('svs-fw-now', 'Runs ' + (s.firmware ? s.firmware.replace(/^SVS_FW_/, 'firmware ') : 'a firmware not reported yet') +
+    (d.checked ? ' · ' + d.summary : ''));
+  text('svs-fw-state', busyTask ? u.phase + '…' : '');
+
+  // The firmware to write: chosen first, checked by the bridge (see stageSvsFirmware)
+  const img = u.image;
+  $('svs-rel').disabled = $('svs-file-btn').disabled = busyTask || svsStaging || svsUpdating;
+  $('svs-staged').hidden = !img.staged || svsStaging;
+  text('svs-src', img.source);
+  text('svs-size', img.size.toLocaleString() + (d.checked ? ' of ' + d.app_space.toLocaleString() : '') + ' bytes');
+  text('svs-sha', img.sha256);
+
+  // Update SVS checks the bootloader itself each time; a firmware known not to fit below it waits
+  const fits = !d.checked || img.size <= d.app_space;
+  $('svs-flash-btn').disabled = !s.connected || busyTask || svsStaging || svsUpdating || !img.staged || !fits;
+  const noAnswer = u.result_of === 'checking' && !u.result_ok && !d.checked;  // the bootloader did not answer
+  let msg = '', cls = '';
+  if (busyTask) {
+    // the phase is in the heading
+  } else if (d.checked && !d.compatible) {
+    msg = d.problem; cls = 'bad';
+  } else if (img.staged && !fits) {
+    msg = u.blocker; cls = 'bad';
+  } else if (u.result_of === 'probing') {
+    msg = u.result;
+  } else if (u.result_of !== 'idle' && (u.result_of === 'flashing' || !u.result_ok)) {
+    msg = u.result; cls = u.result_ok ? 'ok' : 'bad';
+  }
+  setMsg($('svs-flash-msg'), msg, cls);
+  // Diagnostics: offered when the bootloader did not answer
+  $('svs-probe').hidden = !(noAnswer || u.task === 'probing' || u.result_of === 'probing');
+  $('svs-probe-btn').disabled = busyTask || !s.connected || svsUpdating;
+
+  // The flash itself: over the whole page, as nothing else may be done meanwhile
+  if (flashing) {
+    svsFlashSeen = true;
+    busy({mode: 'progress', frac: u.progress / 100, title: 'Flashing the SVS',
+          text: u.phase + '…\nDo not unplug the SVS or the bridge.'});
+  } else if (svsFlashSeen && u.result_of === 'flashing') {
+    svsFlashSeen = false;
+    busy({mode: u.result_ok ? 'ok' : 'bad', title: u.result_ok ? 'SVS updated' : 'The flash failed',
+          text: u.result, actions: [closeAction]});
+  }
+}
+let svsFlashSeen = false;
+
+// The status once, without touching the polling timer
+async function refreshSvsNow() {
+  if (!signedIn) return;
+  try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
+}
+
+let svsTimer = null;
+async function refreshSvs() {
+  clearTimeout(svsTimer);
+  if (!signedIn) return;
+  try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
+  if (!cfgTimer) refreshCfg();
+  // Poll faster while checking or flashing; not at all while the socket brings it
+  svsTimer = wsLive ? null : setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
+}
+
+// --- SVS: the switch --------------------------------------------------------------
+//
+// The row of modules as they sit: outputs, the control module, inputs. What
+// each module is and its name is the layout, kept on the bridge (the SVS only
+// counts its inputs and recognises V3 modules); per-input settings and IR
+// codes live in the SVS and are read and saved on request.
+
+const IN_KINDS = {
+  scart: ['SCART', 'SCART', 'RGBS, RGsB, YPbPr'],
+  component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
+  vga: ['VGA', 'VGA', 'HD-15, audio jack'],
+  svideo: ['S-Video / Composite', 'S-VIDEO/CV', 'S-Video, composite, stereo audio'],
+  dterm: ['D-Terminal', 'D-TERM', 'Japanese YPbPr, stereo'],
+};
+const OUT_KINDS = {
+  scart: ['SCART', 'SCART', 'RGB or YPbPr'],
+  component: ['Component', 'YPBPR', 'YPbPr, stereo audio'],
+  vga: ['VGA', 'VGA', 'HD-15, audio jack'],
+  svideo: ['S-Video / Composite', 'S-VIDEO/CV', 'S-Video, composite, stereo audio'],
+  bnc: ['BNC', 'BNC', 'R, G, B, H/CS, V'],
+};
+const MAX_OUTPUTS = 6;
+const TX = [
+  {key: 'rgb_to_ypbpr', fit: 'rgb_to_ypbpr', name: 'RGB → YPbPr', sub: 'RGB TO YPBPR',
+   desc: 'Turns an RGB source into component video on the way out, so an RGB console can feed a component-only display. You choose the inputs it acts on.'},
+  {key: 'ypbpr_to_rgb', fit: 'ypbpr_to_rgb', name: 'YPbPr → RGB', sub: 'YPBPR TO RGB',
+   desc: 'Turns a component source into RGB on the way out, so a component console can feed an RGB monitor. You choose the inputs it acts on.'},
+];
+// The official utility's IR presets ([button, address, command]); RetroTINK 4K
+// Profile 4 corrected to 0x0A (the utility sends INPUT's 0x11)
+const REMOTES = {"RetroTINK 4K Pro":[["Power",73,26],["INPUT",73,17],["OUT",73,32],["SCL",73,33],["SFX",73,34],["ADC",73,35],["PROF",73,36],["Profile 1",73,11],["Profile 2",73,7],["Profile 3",73,3],["Profile 4",73,10],["Profile 5",73,6],["Profile 6",73,2],["Profile 7",73,9],["Profile 8",73,5],["Profile 9",73,1],["Profile 10",73,37],["Profile 11",73,38],["Profile 12",73,39],["MENU",73,92],["BACK",73,66],["Up",73,24],["Left",73,87],["Enter",73,83],["Right",73,79],["Down",73,16],["DIAG",73,40],["STAT",73,41],["AUTO-GAIN",73,43],["AUTO-PHASE",73,45],["PLAY/PAUSE",73,86],["SAFE",73,46],["SYNC-GEN",73,44],["SYNC-BUF",73,47],["4K",73,48],["1080p",73,49],["1440p",73,50],["480p",73,51],["RES1",73,52],["RES2",73,53],["RES3",73,54],["RES4",73,55],["AUX1",73,56],["AUX2",73,57],["AUX3",73,58],["AUX4",73,59],["AUX5",73,60],["AUX6",73,61],["AUX7",73,62],["AUX8",73,63]],"RetroTINK 4K CE":[["Power",73,26],["INPUT",73,17],["OUT",73,32],["SCALER",73,33],["SFX",73,34],["ADC",73,35],["PROF",73,36],["Profile 1",73,11],["Profile 2",73,7],["Profile 3",73,3],["Profile 4",73,10],["Profile 5",73,6],["Profile 6",73,2],["Profile 7",73,9],["Profile 8",73,5],["Profile 9",73,1],["Profile 10",73,37],["Profile 11",73,38],["Profile 12",73,39],["MENU",73,92],["BACK",73,66],["Up",73,24],["Left",73,87],["Enter",73,83],["Right",73,79],["Down",73,16],["DIAG",73,40],["STAT",73,41],["AUTO-GAIN",73,43],["AUTO-PHASE",73,45],["AUD",73,97],["SAFE",73,46],["SYNC-GEN",73,44],["SYNC-BUF",73,47],["4K",73,48],["1080p",73,49],["1440p",73,50],["480p",73,51],["RES1",73,52],["RES2",73,53],["COL",73,96],["AUX1",73,56],["AUX2",73,57],["AUX3",73,58],["AUX4",73,59],["AUX5",73,60],["AUX6",73,61],["AUX7",73,62],["AUX8",73,63]],"RetroTINK 5X Pro":[["Power",179,220],["RGB",179,176],["YPbPr",179,177],["Y/C",179,178],["CV",179,179],["SVC",179,180],["YSD",179,181],["Profile 1",179,146],["Profile 2",179,147],["Profile 3",179,204],["Profile 4",179,142],["Profile 5",179,143],["Profile 6",179,200],["Profile 7",179,138],["Profile 8",179,139],["Profile 9",179,196],["Profile 10",179,135],["LOAD",179,182],["SAVE",179,183],["MENU",179,226],["BACK",179,197],["Up",179,202],["Left",179,153],["ENTER",179,206],["Right",179,193],["Down",179,210],["ABOUT",179,184],["STAT",179,185],["PHASE +",179,186],["PHASE -",179,189],["PROC",179,187],["SAFE",179,190],["SYNC-LOCK",179,188],["SYNC-BUF",179,191],["1080pO",179,208],["1080pF",179,209],["1080pU",179,211],["720p",179,212],["1440p2",179,213],["1440p1",179,214],["240p",179,215],["480i",179,216],["INPUT",179,217],["OUT",179,218],["SCL",179,219],["INTP",179,230],["SAMP",179,221],["SDP",179,222],["ADC",179,223],["HDMI",179,224],["AUX1",179,225],["AUX2",179,229],["AUX3",179,227],["AUX4",179,228]],"OSSC":[["1",62,41],["2",62,169],["3",62,105],["4",62,233],["5",62,25],["6",62,153],["7",62,89],["8",62,217],["9",62,57],["0",62,201],["10+",62,185],["TOGGLE/RETURN",62,121],["PIC/CANCEL",62,141],["MENU",62,77],["EXIT",62,237],["INFO",62,101],["CLOCK, EJECT",62,209],["REWIND",62,97],["FORWARD",62,225],["L/R",62,226],["PAUSE, ZOOM",62,193],["CHAPTER-",62,157],["CHAPTER+",62,93],["STOP",62,161],["PLAY",62,65],["LEFT",62,173],["RIGHT",62,109],["UP",62,45],["DOWN",62,205],["OK",62,29],["POWER",62,1],["VOL-",28,240],["VOL+",28,112],["MUTE",28,24],["CH+",28,80],["CH-",28,208],["TV/AV",28,200],["PNS",28,72],["TONE-",94,216],["TONE+",94,88]],"OSSC Pro":[["Power",10,232],["TONE-",10,24],["TONE+",10,152],["TV/AV",10,122],["MUTE",10,208],["PNS",10,80],["CH+",10,72],["CH-",10,168],["MENU",10,202],["L/R",10,197],["PIC/CANCEL",10,38],["EXIT",10,38],["LEFT",10,206],["RIGHT",10,78],["UP",10,14],["DOWN",10,142],["OK",10,204],["INFO",10,8],["PAUSE",10,50],["PLAY",10,162],["STOP",10,98],["EJECT",10,226],["1",10,176],["2",10,112],["3",10,240],["4",10,56],["5",10,184],["6",10,120],["7",10,248],["8",10,32],["9",10,187],["0",10,48],["10+",10,136],["TOGGLE/RETURN",10,204]]};
+
+// Module fronts, drawn from photos of the real modules: connectors in one column
+// (audio first), the module's name printed along its side
+function face(kind, role, o) {
+  o = o || {};
+  const rca = (y, c) => `<circle cx="62" cy="${y}" r="11" fill="${c}"/><circle cx="62" cy="${y}" r="7.3" fill="#C9CCD1"/><circle cx="62" cy="${y}" r="3.1" fill="#0B0C0E"/>`;
+  const lab = (y, t) => `<text x="44" y="${y + 2.5}" font-size="7" fill="#7A7E85" text-anchor="end">${t}</text>`;
+  const W = '#E6E6E2', R = '#C9423A';
+  const col = (list) => list.map(([y, c, t]) => rca(y, c) + lab(y, t)).join('');
+  let body = '';
+  if (kind === 'scart') {
+    let pins = '';
+    for (let y = 46; y <= 136; y += 9) pins += `<rect x="51" y="${y}" width="5" height="3"/>`;
+    for (let y = 50.5; y <= 132; y += 9) pins += `<rect x="65" y="${y}" width="5" height="3"/>`;
+    body = '<circle cx="62" cy="22" r="3" fill="#8A8E95"/><path d="M44 34H80V140L72 152H44Z" fill="#0B0C0E" stroke="#6B7078" stroke-width="2" stroke-linejoin="round"/>' +
+      `<path d="M49 40H75V137L69 146H49Z" fill="#17191C"/><g fill="#B8A06A">${pins}</g><circle cx="62" cy="166" r="3" fill="#8A8E95"/>`;
+  } else if (kind === 'component') {
+    body = col([[36, R, 'R'], [64, W, 'L'], [92, R, 'Pr'], [120, '#3A78C9', 'Pb'], [148, '#3FA35B', 'Y']]);
+  } else if (kind === 'svideo') {
+    body = col([[36, R, 'R'], [64, W, 'L'], [94, '#D9B23A', 'CV']]) +
+      '<circle cx="62" cy="136" r="13" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="2.4"/><rect x="59" y="124" width="6" height="5" fill="#A7ABB1"/>' +
+      '<g fill="#C9A55A"><circle cx="57" cy="133" r="1.6"/><circle cx="67" cy="133" r="1.6"/><circle cx="55" cy="141" r="1.6"/><circle cx="69" cy="141" r="1.6"/></g>' + lab(136, 'S');
+  } else if (kind === 'vga') {
+    // HD-15: a D-shaped shell (the wide side to the left), the blue insert with its three staggered
+    // rows of five pin holes, and a hex standoff at each end
+    let pins = '';
+    for (const [x, y0] of [[56.5, 121], [62, 124.6], [67.5, 121]]) {
+      for (let i = 0; i < 5; i++) pins += `<circle cx="${x}" cy="${y0 + i * 7.2}" r="1.5"/>`;
+    }
+    const hex = (y) => {
+      const pts = [0, 60, 120, 180, 240, 300].map((a) => `${(62 + 5.6 * Math.cos(a * Math.PI / 180)).toFixed(2)},${(y + 5.6 * Math.sin(a * Math.PI / 180)).toFixed(2)}`).join(' ');
+      return `<polygon points="${pts}" fill="#A7ABB1" stroke="#7A7E85" stroke-width="1"/><circle cx="62" cy="${y}" r="2.3" fill="#0B0C0E"/>`;
+    };
+    body = '<circle cx="62" cy="32" r="7.5" fill="#0B0C0E" stroke="#A7ABB1" stroke-width="2"/><circle cx="62" cy="32" r="3" fill="#2E3238"/><circle cx="60.8" cy="30.8" r="0.9" fill="#5A5F68"/>' + lab(32, '3.5') +
+      col([[58, R, 'R'], [84, W, 'L']]) + hex(105) + hex(169) +
+      '<path d="M48 110L76 115V159L48 164Z" fill="#B4B8BE" stroke="#8D9198" stroke-width="2" stroke-linejoin="round"/>' +
+      '<path d="M52 114.5L72 118.4V155.6L52 159.5Z" fill="#2F6FC0" stroke="#22508F" stroke-width="1" stroke-linejoin="round"/>' +
+      `<g fill="#0F1F36">${pins}</g>` + lab(137, 'HD-15');
+  } else if (kind === 'dterm') {
+    let pins = '';
+    for (const x of [59, 63]) for (let y = 103; y < 140; y += 5) pins += `<rect x="${x}" y="${y}" width="2" height="2"/>`;
+    body = col([[40, R, 'R'], [68, W, 'L']]) +
+      '<path d="M53 94H71V144L67 150H57L53 144Z" fill="#D8CFB8" stroke="#A89E86" stroke-linejoin="round"/>' +
+      `<rect x="58" y="100" width="8" height="42" rx="1" fill="#2A2620"/><g fill="#C9A55A">${pins}</g>` + lab(122, 'D');
+  } else if (kind === 'bnc') {
+    body = [[36, 'V'], [64, 'H/CS'], [92, 'B'], [120, 'G'], [148, 'R']].map(([y, t]) =>
+      `<rect x="49" y="${y - 2}" width="4" height="4" fill="#8A8E95"/><rect x="71" y="${y - 2}" width="4" height="4" fill="#8A8E95"/>` +
+      `<circle cx="62" cy="${y}" r="10" fill="#B8BCC2" stroke="#7A7E85"/><circle cx="62" cy="${y}" r="6" fill="#1A1C20"/><circle cx="62" cy="${y}" r="1.6" fill="#C9A55A"/>` + lab(y, t)).join('');
+  } else if (kind === 'empty') {
+    body = '<rect x="36" y="40" width="52" height="110" rx="6" fill="none" stroke="#4A4F57" stroke-width="1.5" stroke-dasharray="4 4"/>' +
+      '<text x="62" y="102" font-size="20" fill="#5A5F68" text-anchor="middle">?</text>';
+  } else if (kind === 'control') {
+    body = '<rect x="101" y="82" width="7" height="36" rx="1.5" fill="#0B0C0E" stroke="#3A3D42" stroke-width="1.2"/>';
+  } else if (kind === 'transcoder') {
+    body = `<text x="62" y="100" transform="rotate(-90 62 100)" font-size="8" font-weight="500" letter-spacing="1.2" fill="#8A8E95" text-anchor="middle" dominant-baseline="middle">${o.sub} TRANSCODER</text>`;
+  }
+  const names = {scart: 'SCART', component: 'COMPONENT', vga: 'VGA', svideo: 'COMPOSITE', dterm: 'D-TERMINAL', bnc: 'BNC'};
+  const printed = names[kind] ? names[kind] + (role === 'out' ? ' OUTPUT' : ' INPUT') : '';
+  return `<svg viewBox="0 0 112 200" aria-hidden="true" font-family="IBM Plex Mono,monospace">` +
+    '<rect x="1" y="1" width="110" height="198" rx="5" fill="#161719" stroke="#2E3033" stroke-width="1.5"/>' +
+    (printed ? `<text x="14" y="100" transform="rotate(-90 14 100)" font-size="7.5" font-weight="500" letter-spacing="1.2" fill="#6F737A" text-anchor="middle" dominant-baseline="middle">${printed}</text>` : '') +
+    body + (o.tag ? `<text x="62" y="190" font-size="9" font-weight="500" fill="#8A8E95" text-anchor="middle">${o.tag}</text>` : '') + '</svg>';
+}
+
+let layout = {inputs: [], outputs: []};
+let cfg = null;            // GET /device/svs/config
+let edits = null;          // the settings as changed on this page (null until read)
+let editsSeq = -1;         // the read they started from
+let sel = {t: 'ctl', i: 0};
+let remote = 'RetroTINK 4K Pro';
+let cfgOp = false;         // a read or save started from this page is running
+
+const hex2 = (n) => n.toString(16).toUpperCase().padStart(2, '0');
+
+function inputCount() {
+  if (svs && svs.connected && svs.total_inputs > 0) return Math.min(svs.total_inputs, 32);
+  return layout.inputs.length;
+}
+
+function layoutInput(i) {
+  while (layout.inputs.length <= i) layout.inputs.push({kind: '', name: ''});  // not set up yet
+  return layout.inputs[i];
+}
+
+// What sits at input i: a V3 module the SVS recognised, what was picked, or
+// nothing yet (every input starts out unset: the bridge does not guess)
+function inputKind(i) {
+  const v3 = cfg && cfg.snapshot && cfg.snapshot.v3[i];
+  if (v3 && v3.scart) return {kind: 'scart', v3: true, name: 'SCART V3', short: 'SCART V3'};
+  if (v3 && v3.vga) return {kind: 'vga', v3: true, name: 'VGA V3', short: 'VGA V3'};
+  const k = layoutInput(i).kind;
+  if (!(k in IN_KINDS)) return {kind: 'empty', v3: false, unset: true, name: 'Module not set', short: 'NOT SET'};
+  return {kind: k, v3: false, name: IN_KINDS[k][0], short: IN_KINDS[k][1]};
+}
+
+
+// What can be plugged into each module: consoles (with the video they send
+// stock) on the inputs, scalers and displays on the outputs. The id is what
+// the bridge stores and reports to Home Assistant (current_input_device).
+const SIGNALS = {rgb: 'RGB', ypbpr: 'component', dterm: 'D-Terminal', vga: 'VGA', yc: 'S-Video', cv: 'composite'};
+const CONSOLES = [
+  ['nes', 'NES / Famicom', 'Nintendo', 'cv'],
+  ['snes', 'Super Nintendo / Super Famicom', 'Nintendo', 'rgb yc cv'],
+  ['n64', 'Nintendo 64', 'Nintendo', 'yc cv'],
+  ['gamecube', 'GameCube', 'Nintendo', 'ypbpr rgb dterm yc cv'],
+  ['wii', 'Wii', 'Nintendo', 'ypbpr rgb dterm yc cv'],
+  ['sms', 'Master System', 'Sega', 'rgb cv'],
+  ['megadrive', 'Mega Drive / Genesis', 'Sega', 'rgb cv'],
+  ['saturn', 'Saturn', 'Sega', 'rgb yc cv'],
+  ['dreamcast', 'Dreamcast', 'Sega', 'vga rgb yc cv'],
+  ['ps1', 'PlayStation', 'Sony', 'rgb yc cv'],
+  ['ps2', 'PlayStation 2', 'Sony', 'ypbpr rgb dterm yc cv'],
+  ['ps3', 'PlayStation 3', 'Sony', 'ypbpr dterm yc cv'],
+  ['xbox', 'Xbox', 'Microsoft', 'ypbpr rgb dterm yc cv'],
+  ['xbox360', 'Xbox 360', 'Microsoft', 'ypbpr vga cv'],
+  ['pce', 'PC Engine / TurboGrafx-16', 'NEC', 'cv'],
+  ['neogeo', 'Neo Geo AES', 'SNK', 'rgb cv'],
+  ['atari2600', 'Atari 2600', 'Atari', 'cv'],
+  ['jaguar', 'Jaguar', 'Atari', 'rgb yc cv'],
+  ['3do', '3DO', 'Panasonic', 'yc cv'],
+  ['cdi', 'CD-i', 'Philips', 'rgb yc cv'],
+  ['amiga', 'Amiga', 'Commodore', 'rgb'],
+  ['c64', 'Commodore 64', 'Commodore', 'yc cv'],
+  ['msx', 'MSX', 'MSX', 'rgb cv'],
+  ['supergun', 'Arcade board (Supergun)', 'Arcade', 'rgb'],
+  ['pc', 'PC', 'PC', 'vga'],
+].map(([id, name, maker, sig]) => ({id, name, maker, signals: sig.split(' ')}));
+const OUT_DEVICES = [
+  ['rt4k', 'RetroTINK 4K'], ['rt4kce', 'RetroTINK 4K CE'], ['rt5x', 'RetroTINK 5X Pro'], ['ossc', 'OSSC'],
+  ['osscpro', 'OSSC Pro'], ['morph4k', 'PixelFX Morph 4K'], ['framemeister', 'Framemeister'],
+  ['pvm', 'PVM / BVM monitor'], ['crt', 'CRT TV'], ['capture', 'Capture card'],
+].map(([id, name]) => ({id, name}));
+// What each input module takes
+const MODULE_SIGNALS = {scart: ['rgb', 'ypbpr'], component: ['ypbpr'], vga: ['vga', 'rgb'], svideo: ['yc', 'cv'], dterm: ['dterm']};
+const listSignals = (sig) => sig.map((x) => SIGNALS[x]).join(', ').replace(/, ([^,]*)$/, ' or $1');
+
+// A console or device picker
+function devicePicker(id, list, cur, groups) {
+  const opt = (d) => `<option value="${d.id}"${d.id === cur ? ' selected' : ''}>${esc(d.name)}</option>`;
+  return `<select id="${id}"><option value="">Choose…</option>` +
+    (groups ? groups.filter((g) => g[1].length).map(([label, ds]) => `<optgroup label="${esc(label)}">${ds.map(opt).join('')}</optgroup>`).join('') : list.map(opt).join('')) +
+    '</select>';
+}
+
+// The module takes the device's name (what Home Assistant shows)
+function pickDevice(entry, id, list) {
+  const d = list.find((x) => x.id === id);
+  entry.name = d ? d.name : '';
+  if (d) entry.device = d.id;
+  else delete entry.device;
+}
+
+function readSettings() { return cfg && cfg.snapshot ? cfg.snapshot.settings : null; }
+
+// The output side is a chain from the control module outwards: the outputs and
+// the transcoders, where they sit. A transcoder converts only the outputs past
+// it (further from the control module), so its place is part of the layout.
+const TX_KIND = {tx_rgb_to_ypbpr: 0, tx_ypbpr_to_rgb: 1};  // layout kind -> TX index
+const isTx = (o) => o.kind in TX_KIND;
+const txOf = (o) => TX[TX_KIND[o.kind]];
+
+// Shown unless the SVS says it is not fitted (before a read, as last placed)
+function chainVisible(o) {
+  const snap = cfg && cfg.snapshot;
+  return !isTx(o) || !snap || !!snap.transcoders[txOf(o).fit];
+}
+
+// A transcoder the SVS reports that has no place yet goes next to the control module
+function placeTranscoders() {
+  const snap = cfg && cfg.snapshot;
+  if (!snap) return;
+  for (const t of TX) {
+    const kind = 'tx_' + t.key;
+    if (snap.transcoders[t.fit] && !layout.outputs.some((o) => o.kind === kind)) {
+      layout.outputs.unshift({kind, name: ''});
+      if (sel.t === 'out' || sel.t === 'tx') sel.i++;
+    }
+  }
+}
+
+const outputCount = () => layout.outputs.filter((o) => !isTx(o)).length;
+// Output number of chain entry i (1 = next to the control module)
+const outNumber = (i) => layout.outputs.slice(0, i + 1).filter((o) => !isTx(o)).length;
+const txBefore = (i) => layout.outputs.slice(0, i).filter((o) => isTx(o) && chainVisible(o)).map(txOf);
+const outsAfter = (i) => layout.outputs.map((o, j) => j > i && !isTx(o) ? j : -1).filter((j) => j >= 0);
+
+function syncEdits() {
+  const snap = cfg && cfg.snapshot;
+  if (!snap) { edits = null; editsSeq = -1; return; }
+  if (snap.seq !== editsSeq) {
+    edits = JSON.parse(JSON.stringify(snap.settings));
+    // Auto profile off is for HDMI modules (a console on an analog and an HDMI input at once: which one
+    // loads its profile), and the bridge knows of none: every input keeps it on, one read off is a change
+    for (const s of edits) s.auto_profile = true;
+    editsSeq = snap.seq;
+  }
+}
+
+const OPT_KEYS = ['auto_profile', 'rgsb', 'sync_bypass', 'rgb_to_ypbpr', 'ypbpr_to_rgb'];
+function changes(i) {
+  const r = readSettings();
+  if (!edits || !r || !r[i]) return 0;
+  const a = edits[i], b = r[i];
+  return OPT_KEYS.filter((k) => a[k] !== b[k]).length + (JSON.stringify(a.ir) !== JSON.stringify(b.ir) ? 1 : 0);
+}
+function pendingTotal() {
+  let n = 0;
+  if (edits) for (let i = 0; i < edits.length; i++) n += changes(i);
+  return n;
+}
+function txChanges() {
+  const r = readSettings();
+  return !!edits && edits.some((e, i) => e.rgb_to_ypbpr !== r[i].rgb_to_ypbpr || e.ypbpr_to_rgb !== r[i].ypbpr_to_rgb);
+}
+
+// --- Rendering
+
+function modTile(o) {
+  const aria = o.aria + (o.pending ? ', changes not saved to the SVS yet' : '');
+  return `<button type="button" class="mod${o.sel ? ' sel' : ''}${o.pending ? ' pend' : ''}" data-t="${o.t}" data-i="${o.i}"` +
+    (o.group ? ` data-group="${o.group}"` : '') + ` aria-label="${esc(aria)}"${o.pending ? ' title="Changes not saved to the SVS yet"' : ''}` +
+    `${o.sel ? ' aria-pressed="true"' : ''}>` +
+    o.svg + `<span class="mk" style="color:${o.color || ''}">${esc(o.kind)}${o.dot ? '<span class="vdot" title="Recognised by the SVS"></span>' : ''}</span>` +
+    `<span class="mn${o.name ? '' : ' none'}">${esc(o.name || o.empty || '')}</span>` +
+    (o.led ? `<span class="led ${o.led.color}${o.led.on ? ' on' : ''}" role="img" aria-label="${esc(o.led.label)}" title="${esc(o.led.label)}"></span>`
+      : '<span class="led ph" aria-hidden="true"></span>') +
+    '</button>';
+}
+
+function renderStack() {
+  const n = inputCount(), snap = cfg && cfg.snapshot;
+  placeTranscoders();
+  const outs = layout.outputs.map((o, i) => {
+    if (!chainVisible(o)) return '';
+    if (isTx(o)) {
+      const t = txOf(o);
+      // Converting now: the input on screen has it on in the SVS (as last read)
+      const cur = svs && svs.current_input > 0 ? snap && snap.settings && snap.settings[svs.current_input - 1] : null;
+      const on = !!(cur && cur[t.key]);
+      return modTile({t: 'tx', i, group: 'out', sel: sel.t === 'tx' && sel.i === i, svg: face('transcoder', 'tx', {tag: 'TX', sub: t.sub}),
+                      kind: 'TX', color: 'var(--ok)', name: t.name, aria: `${t.name} transcoder, converts the outputs past it${on ? ', converting now' : ''}`,
+                      led: {color: 'b', on, label: on ? 'Converting the input on screen' : cur ? 'Not converting the input on screen' : 'Not known: read the SVS settings'}});
+    }
+    const k = OUT_KINDS[o.kind] || OUT_KINDS.component, num = outNumber(i);
+    return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + num}),
+                    kind: k[1], color: 'var(--blue)', name: o.name, empty: 'Nothing picked',
+                    aria: `Output ${num}, ${k[0]}${o.name ? ', to ' + o.name : ''}`});
+  }).reverse().join('');
+  const nOut = outputCount();
+  const add = nOut < MAX_OUTPUTS
+    ? `<button type="button" class="mod add" data-act="add-out"><svg viewBox="0 0 24 24" style="width:20px;height:20px" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add output<span class="small">${MAX_OUTPUTS - nOut} left</span></button>` : '';
+  const ins = Array.from({length: n}, (_, i) => {
+    const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
+    return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
+                    svg: face(k.kind, 'in', {tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
+                    kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'Nothing picked', pending: changes(i) > 0,
+                    led: {color: 'g', on: !!lit, label: lit ? 'On screen now' : 'Not on screen'},
+                    aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
+  }).join('');
+  const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
+  const on = !!(svs && svs.connected);  // the control module is powered when the bridge sees the SVS
+  $('stack').innerHTML =
+    `<div class="sgroup outs"><div class="shead"><span class="small">set by you · ${nOut} of up to ${MAX_OUTPUTS}</span><h2 class="out">Outputs</h2></div>` +
+    `<div class="stiles" data-group="out">${add}${outs}</div></div><div class="ssep"></div>` +
+    `<div class="sgroup ctl"><h2 class="ctl">Control</h2><div class="stiles">` +
+    modTile({t: 'ctl', i: 0, sel: sel.t === 'ctl', svg: face('control', 'ctl', {tag: 'CTRL'}), kind: 'CONTROL', color: 'var(--accent)', name: fw, aria: 'Control module' + (on ? ', on' : ''),
+                    led: {color: 'r', on, label: on ? 'On: the SVS is connected to the bridge' : 'Off: no SVS connected to the bridge'}}) +
+    `</div></div><div class="ssep"></div>` +
+    `<div class="sgroup ins"><div class="shead"><h2>Inputs</h2><span class="small">${n ? (svs && svs.total_inputs > 0 ? 'the SVS reports ' + n : n + ' last known') : 'the SVS has not said how many yet'}</span></div>` +
+    `<div class="stiles" data-group="in">${ins}</div></div>`;
+}
+
+function optRow(i, key, label, ok, hint, why) {
+  const r = readSettings(), e = edits && edits[i];
+  const can = ok && !!e;
+  const checked = e ? e[key] : false;
+  const changed = e && r && e[key] !== r[i][key];
+  return `<label class="switch${can ? '' : ' off'}"><input type="checkbox" data-opt="${key}"${checked ? ' checked' : ''}${can ? '' : ' disabled'}>` +
+    `<span>${label}${changed ? '<span class="chg">changed</span>' : ''}<span class="hint">${esc(!e ? 'Read the settings from the SVS first' : ok ? hint : why)}</span></span></label>`;
+}
+
+function irLabel(a, c) {
+  for (const list of [REMOTES[remote] || [], ...Object.values(REMOTES)]) {
+    const b = list.find((x) => x[1] === a && x[2] === c);
+    if (b) return b[0];
+  }
+  return 'Code';
+}
+
+function renderInspector() {
+  let html;
+  const el = $('insp'), snap = cfg && cfg.snapshot, n = inputCount();
+  if (sel.t === 'in' && sel.i >= n) sel = {t: 'ctl', i: 0};
+  const entry = layout.outputs[sel.i];
+  if (sel.t === 'out' && !(entry && !isTx(entry))) sel = {t: 'ctl', i: 0};
+  if (sel.t === 'tx' && !(entry && isTx(entry) && chainVisible(entry))) sel = {t: 'ctl', i: 0};
+
+  if (sel.t === 'in') {
+    const i = sel.i, k = inputKind(i), li = layoutInput(i), lit = svs && svs.current_input === i + 1;
+    const e = edits && edits[i], r = readSettings();
+    // A component module carries RGB too: a PS2 set to RGB sends it (sync on green) over its component cable
+    const isRgb = ['scart', 'vga', 'component'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
+    const txFit = (t) => !!(snap && snap.transcoders[t]);
+    const needKind = 'Pick the module fitted here first';
+    // The options this module cannot have are left out. Until the settings are read, which modules are
+    // V3 and which transcoders are fitted is not known: those options show, waiting for the read.
+    // Sync on green: V3 SCART and V3 VGA modules; sync bypass: V3 SCART only (the SVS ignores both elsewhere)
+    const maybeV3 = (kinds) => snap ? k.v3 && kinds.includes(k.kind) : k.unset || kinds.includes(k.kind);
+    // A transcoder, if fitted and the module has that signal. One that is on for a module without it
+    // stays, so it can be turned off (it would convert the wrong signal).
+    const txOn = (key) => !!(e && e[key]) || !!(r && r[i] && r[i][key]);
+    const txRow = (key, label, takes, hint, what) => {
+      if (snap && !txFit(key)) return '';
+      const wrong = !k.unset && !takes;
+      if (wrong && !txOn(key)) return '';
+      return optRow(i, key, label, takes || txOn(key), wrong ? `This module has no ${what} to convert: turn it off` : hint, needKind);
+    };
+    const module = k.v3
+      ? `<div class="detected">${face(k.kind, 'in', {tag: 'V3'})}<div><b style="font-size:14px">${k.name} module</b>` +
+        `<div class="small" style="color:#9FD8B4">Recognised by the SVS: V3 modules report themselves.</div></div></div>`
+      : `<div class="pick" role="radiogroup" aria-label="Input module">` + Object.entries(IN_KINDS).map(([id, kk]) =>
+          `<button type="button" role="radio" aria-checked="${id === k.kind}" data-kind="${id}">${face(id, 'in')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
+        `</div><span class="small${k.unset ? ' warn' : ''}">${k.unset ? 'Not set up yet: pick the module fitted in this slot.' : 'Only V3 modules report themselves; for the rest, pick what is fitted.'}</span>`;
+    const codes = e ? e.ir : [];
+    const irChanged = e && r && JSON.stringify(e.ir) !== JSON.stringify(r[i].ir);
+    const takes = MODULE_SIGNALS[k.kind] || [];
+    const fits = (c) => c.signals.some((x) => takes.includes(x));
+    const con = CONSOLES.find((c) => c.id === li.device);
+    const groups = k.unset ? [['Consoles', CONSOLES]]
+      : [[`Fits this ${k.name} module`, CONSOLES.filter(fits)], ['Other consoles', CONSOLES.filter((c) => !fits(c))]];
+    const fitNote = !con ? 'Shown in Home Assistant with the active input.'
+      : k.unset ? `A ${con.name} sends ${listSignals(con.signals)}.`
+      : fits(con) ? `Sends ${listSignals(con.signals.filter((x) => takes.includes(x)))} to this ${k.name} module.`
+      : `Stock, a ${con.name} sends ${listSignals(con.signals)}, and this ${k.name} module takes ${listSignals(takes)}. Fine if it is modded or goes through an adapter.`;
+    html = `<div class="insp-face">${face(k.kind, 'in', {tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">Input ${i + 1}</h3>${lit ? '<span class="chip" style="border-color:var(--accent);color:#F28BAA"><span class="dot" style="background:var(--accent)"></span>On screen now</span>' : ''}</div>` +
+      `<div class="stack"><label class="lbl" for="in-dev">What is plugged in</label>${devicePicker('in-dev', CONSOLES, li.device, groups)}` +
+      `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
+      `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
+      `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
+      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, k.kind === 'component' ? 'For RGB over a component cable (a PS2 set to RGB): send it out as component'
+        : 'Send this input out as component', 'RGB') +
+      txRow('ypbpr_to_rgb', 'YPbPr → RGB', isYpbpr, 'Send this input out as RGB', 'YPbPr') +
+      (maybeV3(['scart', 'vga']) ? optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', '') : '') +
+      (maybeV3(['scart']) ? optRow(i, 'sync_bypass', 'Sync bypass', k.v3, 'Pass the console’s sync untouched', '') : '') +
+      optRow(i, 'auto_profile', 'Auto profile', false, '', 'Always on: the scaler gets this input’s profile and IR codes when it comes on (off is for HDMI modules)') +
+      `</div></div>` +
+      `<div class="stack" style="gap:10px"><span class="lbl">IR codes <span class="small">· sent to the scaler when input ${i + 1} comes on${snap ? ' · ' + codes.length + ' of ' + snap.ir_slots : ''}</span>${irChanged ? '<span class="chg">changed</span>' : ''}</span>` +
+      `<div class="irbox"><div class="irs">` + (e ? (codes.length ? codes.map(([a, c], j) =>
+        `<span class="ir"><span class="mono">${j + 1}</span>${esc(irLabel(a, c))}<span class="mono">${hex2(a)} ${hex2(c)}</span>` +
+        `<button type="button" data-ir-del="${j}" aria-label="Remove ${esc(irLabel(a, c))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button></span>`).join('')
+        : '<span class="small">No codes: nothing is sent to the scaler for this input.</span>') : '<span class="small">Read the settings from the SVS first.</span>') +
+      `</div><div class="two"><div class="stack"><label class="lbl" for="ir-remote">Remote</label><select id="ir-remote">` +
+      Object.keys(REMOTES).map((r_) => `<option${r_ === remote ? ' selected' : ''}>${esc(r_)}</option>`).join('') + `</select></div>` +
+      `<div class="stack"><label class="lbl" for="ir-add">Add a button press</label><select id="ir-add"${e && codes.length < snap.ir_slots ? '' : ' disabled'}><option value="">Choose a button…</option>` +
+      (REMOTES[remote] || []).map(([b, a, c], j) => `<option value="${j}">${esc(b)} · ${hex2(a)} ${hex2(c)}</option>`).join('') + `</select></div></div></div></div></div>`;
+  } else if (sel.t === 'out') {
+    const i = sel.i, o = layout.outputs[i], num = outNumber(i), by = txBefore(i);
+    html = `<div class="insp-face">${face(o.kind, 'out', {tag: 'OUT ' + num})}</div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">Output ${num}</h3><button type="button" class="danger" data-act="del-out">Remove output</button></div>` +
+      `<div class="stack"><label class="lbl" for="out-dev">Connected to</label>${devicePicker('out-dev', OUT_DEVICES, o.device)}</div>` +
+      `<div class="stack"><span class="lbl">Module</span><div class="pick out" role="radiogroup" aria-label="Output module">` +
+      Object.entries(OUT_KINDS).map(([id, kk]) => `<button type="button" role="radio" aria-checked="${id === o.kind}" data-kind="${id}">${face(id, 'out')}<b>${kk[0]}</b><small>${kk[2]}</small></button>`).join('') +
+      `</div></div><div class="stack"><span class="lbl">Transcoders</span><div class="small" style="font-size:14px;color:var(--soft)">` +
+      (by.length ? `Converted by the ${by.map((t) => t.name).join(' and the ')} transcoder${by.length > 1 ? 's' : ''}, for the inputs where ${by.length > 1 ? 'they are' : 'it is'} on.`
+        : 'No transcoder between it and the control module: it carries the picture as the console sends it.') +
+      `</div></div><div class="note">The SVS cannot see its outputs, so these are labels for you. A transcoder converts only the outputs past it, further from the control module: drag it to choose which.</div></div>`;
+  } else if (sel.t === 'tx') {
+    const t = txOf(layout.outputs[sel.i]), after = outsAfter(sel.i);
+    const uses = (edits || []).map((e, i) => e[t.key] ? i : -1).filter((i) => i >= 0);
+    html = `<div class="insp-face">${face('transcoder', 'tx', {tag: 'TX', sub: t.sub})}</div>` +
+      `<div class="insp-body"><div class="row"><h3 class="grow">${t.name} transcoder</h3><span class="chip" style="color:var(--ok);border-color:#2A5A3C">Recognised by the SVS</span></div>` +
+      `<div class="small" style="font-size:14px;color:var(--soft)">${t.desc}</div>` +
+      `<div class="stack"><span class="lbl">Converts the outputs past it</span>` +
+      (after.length ? `<div class="irs">${after.map((j) => `<button type="button" data-goto-out="${j}">OUT ${outNumber(j)}${layout.outputs[j].name ? ' · ' + esc(layout.outputs[j].name) : ''}</button>`).join('')}</div>`
+        : '<div class="note warn">No output past it, so it converts nothing. Drag it closer to the control module, or outputs further out.</div>') +
+      `</div><div class="stack"><span class="lbl">Turned on for</span><div class="irs">` +
+      (uses.length ? uses.map((i) => `<button type="button" data-goto="${i}">Input ${i + 1}${layoutInput(i).name ? ' · ' + esc(layoutInput(i).name) : ''}</button>`).join('')
+        : '<span class="small">No input yet. Turn it on from an input’s settings.</span>') + `</div></div>` +
+      `<div class="note">To save these, the bridge switches the SVS to each of those inputs in turn, then back to the one that was on screen.</div></div>`;
+  } else {
+    const v3 = snap ? snap.v3.map((v, i) => v.scart ? (i + 1) + ' SCART' : v.vga ? (i + 1) + ' VGA' : null).filter(Boolean).join(', ') || 'none' : '–';
+    const txs = snap ? TX.filter((t) => snap.transcoders[t.fit]).map((t) => t.name).join(', ') || 'none' : '–';
+    html = `<div class="insp-face">${face('control', 'ctl', {tag: 'CTRL'})}<span class="small">The microSD slot is on the edge by the pins.</span></div>` +
+      `<div class="insp-body"><h3>Control module</h3><div class="kv">` +
+      `<span>Firmware</span><span>${esc(svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, '') : '–')}</span>` +
+      `<span>Input modules</span><span>${svs && svs.total_inputs != null ? svs.total_inputs : '–'}</span>` +
+      `<span>V3 modules</span><span>${esc(v3)}</span><span>Transcoders</span><span>${esc(txs)}</span></div>` +
+      `<div class="note">The control module counts the input modules when it starts, and recognises V3 modules and transcoders (read with the settings). ` +
+      `Reading and saving settings needs its firmware 1.20 or newer. The other modules and the outputs are yours to describe.</div></div>`;
+  }
+  // Polls re-render often; rewriting identical markup would close an open menu
+  if (el.dataset.html !== html) { el.dataset.html = html; el.innerHTML = html; }
+}
+
+function renderCfgBar() {
+  const c = cfg, connected = svs && svs.connected, idle = !c || c.task === 'idle';
+  let title = 'Settings stored in the SVS', sub = '', read = false, write = false, readLabel = 'Read from the SVS';
+  const bar = $('cfg-bar');
+  if (!connected) {
+    sub = 'Plug the SVS into the bridge to read or change its settings.';
+  } else if (!idle) {
+    title = c.task === 'reading' ? 'Reading the SVS’s settings' : 'Saving to the SVS';
+    sub = c.phase + '…';
+  } else if (!c || !c.snapshot) {
+    sub = c && c.blocker ? c.blocker : 'Sync, transcoders, auto profile and IR codes live in the SVS. Read them to see and change them here.';
+    read = !(c && c.blocker);
+  } else {
+    const n = pendingTotal();
+    title = n ? `${n} change${n === 1 ? '' : 's'} not on the SVS yet` : 'These settings match the SVS';
+    const age = c.snapshot.age_s + Math.floor((Date.now() - cfgAt) / 1000);  // fetched only when it changes
+    sub = `Read ${age < 60 ? 'just now' : duration(age) + ' ago'} · firmware ${c.snapshot.firmware.replace(/^SVS_FW_/, '')}`;
+    read = true; readLabel = 'Read again'; write = n > 0;
+  }
+  bar.classList.toggle('warn', !idle);
+  text('cfg-title', title);
+  text('cfg-sub', sub);
+  $('cfg-prog').hidden = idle;
+  if (!idle) $('cfg-prog').value = c.progress;
+  $('cfg-read').hidden = !read; text('cfg-read', readLabel);
+  $('cfg-write').hidden = !(c && c.snapshot) || !idle || !connected;
+  $('cfg-write').disabled = !write;
+  const n = pendingTotal();
+  text('cfg-write', n ? `Save ${n} to the SVS` : 'Save to the SVS');
+  if (idle && c && c.result_of !== 'idle' && c.result) {
+    setMsg($('cfg-msg'), c.result, c.result_ok ? 'ok' : 'bad');
+  } else {
+    setMsg($('cfg-msg'), '');
+  }
+}
+
+function renderSwitch() {
+  if (!signedIn) return;
+  syncEdits();
+  const n = inputCount();
+  const warn = svs && svs.connected && svs.total_inputs > 0 && cfg && cfg.snapshot && cfg.snapshot.inputs !== svs.total_inputs;
+  $('stack-warn').hidden = !warn;
+  if (warn) text('stack-warn', `The SVS now counts ${svs.total_inputs} inputs; its settings were read with ${cfg.snapshot.inputs}. Read them again.`);
+  $('stack-hint').hidden = n < 2 && layout.outputs.length < 2;
+  renderStack();
+  renderInspector();
+  renderCfgBar();
+}
+
+// --- Layout (kept on the bridge)
+
+async function loadLayout() {
+  try {
+    const l = await api('/device/svs/layout');
+    layout = {inputs: l.inputs || [], outputs: l.outputs || []};
+  } catch (e) { /* keep what we have */ }
+  renderSwitch();
+}
+
+let layoutTimer = null;
+function saveLayout(now) {
+  clearTimeout(layoutTimer);
+  layoutTimer = setTimeout(async () => {
+    try {
+      await post('/device/svs/layout', {inputs: layout.inputs.slice(0, 32), outputs: layout.outputs});
+      setMsg($('layout-msg'), '');
+    } catch (e) {
+      setMsg($('layout-msg'), 'Not saved on the bridge: ' + e.message, 'bad');
+    }
+  }, now ? 0 : 600);
+}
+
+// Moves a module within its own side; an input takes its SVS settings along
+// (they become changes to save), since the SVS keeps them by position. On the
+// output side outputs and transcoders move among each other.
+function moveItem(group, from, to) {
+  if (from === to) return;
+  const list = group === 'in' ? layout.inputs : layout.outputs;
+  if (group === 'in') layoutInput(Math.max(from, to));
+  list.splice(to, 0, list.splice(from, 1)[0]);
+  if (group === 'in' && edits) edits.splice(to, 0, edits.splice(from, 1)[0]);
+  if (group === 'in' ? sel.t === 'in' : sel.t === 'out' || sel.t === 'tx') {
+    if (sel.i === from) sel.i = to;
+    else if (from < sel.i && to >= sel.i) sel.i--;
+    else if (from > sel.i && to <= sel.i) sel.i++;
+  }
+  saveLayout(true);
+  renderSwitch();
+}
+
+// --- Settings (stored in the SVS)
+
+let cfgTimer = null;
+let cfgAt = 0;
+async function refreshCfg() {
+  clearTimeout(cfgTimer);
+  cfgTimer = null;
+  if (!signedIn) return;
+  try { cfg = await api('/device/svs/config'); cfgAt = Date.now(); } catch (e) { /* busy */ }
+  const running = cfg && cfg.task !== 'idle';
+  if (!running && cfgOp) {
+    cfgOp = false;
+    busy({mode: cfg.result_ok ? 'ok' : 'bad', title: cfg.result_ok ? (cfg.result_of === 'reading' ? 'Settings read' : 'Saved to the SVS') : 'That did not work',
+          text: cfg.result + '\n\nPlug the RetroTINK’s HD-15 back in.', actions: [closeAction]});
+  } else if (running && cfgOp) {
+    busy({mode: 'progress', frac: cfg.progress / 100, title: cfg.task === 'reading' ? 'Reading the SVS’s settings' : 'Saving to the SVS',
+          text: cfg.phase + '…\nKeep the HD-15 unplugged until this ends.'});
+  }
+  renderSwitch();
+  if (running) cfgTimer = setTimeout(refreshCfg, 700);
+}
+
+async function cfgStart(kind) {
+  const tx = kind === 'write' && txChanges();
+  const ok = await askUser('Unplug the RetroTINK’s HD-15 first',
+    'The SVS shares one serial line between its USB and the HD-15: while the RetroTINK is plugged in, what the bridge sends arrives garbled.' +
+    (tx ? '\n\nTo change the transcoders the SVS switches to each of those inputs in turn, then back.' : '') +
+    '\n\nPlug it back in when this is done.', kind === 'read' ? 'It’s unplugged, read' : 'It’s unplugged, save');
+  if (!ok) return;
+  try {
+    cfg = await post(kind === 'read' ? '/device/svs/config/read' : '/device/svs/config/write',
+                     kind === 'read' ? {} : {settings: edits.slice(0, cfg.snapshot.inputs)});
+    cfgOp = true;
+    refreshCfg();
+  } catch (err) {
+    setMsg($('cfg-msg'), err.message, 'bad');
+  }
+}
+$('cfg-read').onclick = () => cfgStart('read');
+$('cfg-write').onclick = () => cfgStart('write');
+
+// --- Interaction
+
+let dragJustEnded = false;
+$('stack').addEventListener('click', (e) => {
+  if (dragJustEnded) { dragJustEnded = false; return; }
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.act === 'add-out') {
+    layout.outputs.push({kind: 'component', name: ''});
+    sel = {t: 'out', i: layout.outputs.length - 1};
+    saveLayout(true);
+  } else if (b.dataset.t) {
+    sel = {t: b.dataset.t, i: +b.dataset.i};
+  }
+  renderSwitch();
+});
+
+// Alt+Left/Right moves the selected module (inputs count up to the right,
+// outputs away from the control module, to the left)
+$('stack').addEventListener('keydown', (e) => {
+  const b = e.target.closest('.mod[data-group]');
+  if (!b || !e.altKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+  e.preventDefault();
+  const g = b.dataset.group, i = +b.dataset.i;
+  const tiles = [...$('stack').querySelectorAll(`.mod[data-group="${g}"]`)];
+  const next = tiles[tiles.indexOf(b) + (e.key === 'ArrowRight' ? 1 : -1)];
+  if (!next) return;
+  const to = +next.dataset.i;
+  sel = {t: b.dataset.t, i};
+  moveItem(g, i, to);
+  const moved = $('stack').querySelector(`.mod[data-group="${g}"][data-i="${to}"]`);
+  if (moved) moved.focus();
+});
+
+// Dragging: with a mouse at once, on touch after a short hold (so the row
+// still scrolls). A module only drops among modules of its own kind.
+$('stack').addEventListener('pointerdown', (e) => {
+  const tile = e.target.closest('.mod[data-group]');
+  if (!tile || e.button > 0) return;
+  const group = tile.dataset.group, from = +tile.dataset.i;
+  const x0 = e.clientX, y0 = e.clientY;
+  let dragging = false, target = null, cancelled = false;
+  const hold = e.pointerType === 'touch' ? setTimeout(() => begin(), 350) : null;
+  function begin() {
+    if (cancelled || dragging) return;
+    dragging = true;
+    tile.classList.add('dragging');
+    try { tile.setPointerCapture(e.pointerId); } catch (_) { /* gone */ }
+  }
+  function tiles() { return [...$('stack').querySelectorAll(`.mod[data-group="${group}"]`)]; }
+  function move(ev) {
+    if (!dragging) {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (e.pointerType === 'touch') { end(); return; }  // a scroll, not a hold
+      begin();
+    }
+    ev.preventDefault();
+    tile.style.transform = `translateX(${ev.clientX - x0}px)`;
+    target = null;
+    for (const t of tiles()) {
+      const r = t.getBoundingClientRect();
+      if (t !== tile && ev.clientX >= r.left && ev.clientX <= r.right) target = t;
+    }
+    for (const t of tiles()) t.classList.toggle('drop', t === target);
+  }
+  function noScroll(ev) { if (dragging) ev.preventDefault(); }
+  function end() {
+    cancelled = true;
+    clearTimeout(hold);
+    removeEventListener('pointermove', move);
+    removeEventListener('pointerup', up);
+    removeEventListener('pointercancel', end);
+    removeEventListener('touchmove', noScroll);
+    tile.style.transform = '';
+    tile.classList.remove('dragging');
+    for (const t of tiles()) t.classList.remove('drop');
+  }
+  function up() {
+    const was = dragging;
+    end();
+    if (was) {
+      dragJustEnded = true;
+      setTimeout(() => { dragJustEnded = false; }, 0);
+      if (target) { sel = {t: tile.dataset.t, i: from}; moveItem(group, from, +target.dataset.i); }
+    }
+  }
+  addEventListener('pointermove', move, {passive: false});
+  addEventListener('pointerup', up);
+  addEventListener('pointercancel', end);
+  addEventListener('touchmove', noScroll, {passive: false});
+});
+
+$('insp').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.kind) {
+    (sel.t === 'in' ? layoutInput(sel.i) : layout.outputs[sel.i]).kind = b.dataset.kind;
+    saveLayout(true);
+  } else if (b.dataset.act === 'del-out') {
+    layout.outputs.splice(sel.i, 1);
+    sel = {t: 'ctl', i: 0};
+    saveLayout(true);
+  } else if (b.dataset.irDel !== undefined) {
+    edits[sel.i].ir.splice(+b.dataset.irDel, 1);
+  } else if (b.dataset.goto !== undefined) {
+    sel = {t: 'in', i: +b.dataset.goto};
+  } else if (b.dataset.gotoOut !== undefined) {
+    sel = {t: 'out', i: +b.dataset.gotoOut};
+  } else {
+    return;
+  }
+  renderSwitch();
+});
+
+$('insp').addEventListener('change', (e) => {
+  const t = e.target;
+  if (t.id === 'in-dev' || t.id === 'out-dev') {
+    const input = t.id === 'in-dev', entry = input ? layoutInput(sel.i) : layout.outputs[sel.i];
+    pickDevice(entry, t.value, input ? CONSOLES : OUT_DEVICES);
+    saveLayout(true);
+  } else if (t.dataset.opt && edits) {
+    edits[sel.i][t.dataset.opt] = t.checked;
+  } else if (t.id === 'ir-remote') {
+    remote = t.value;
+    try { localStorage.setItem('svs-remote', remote); } catch (_) { /* private mode */ }
+  } else if (t.id === 'ir-add' && t.value !== '' && edits) {
+    const b = REMOTES[remote][+t.value];
+    edits[sel.i].ir.push([b[1], b[2]]);
+  } else {
+    return;
+  }
+  renderSwitch();
+});
+
+$('insp').addEventListener('focusout', () => setTimeout(() => {
+  if (!$('insp').contains(document.activeElement)) renderSwitch();
+}, 0));
+
+try { remote = localStorage.getItem('svs-remote') || remote; } catch (_) { /* private mode */ }
+if (!(remote in REMOTES)) remote = Object.keys(REMOTES)[0];
+
+// --- Cruller -------------------------------------------------------------------
+
+let cruller = null;
+let crullerTimer = null;
+
+function crullerLabel(c) { return c.name || c.instance || c.id; }
+
+function crullerRow(title, detail, on, button) {
+  const row = document.createElement('div');
+  row.className = 'crow' + (on ? ' on' : '');
+  row.innerHTML = `<div class="grow" style="min-width:0"><div class="cn">${esc(title)}</div>` +
+    `<div class="small mono" style="overflow-wrap:anywhere">${esc(detail)}</div></div>`;
+  row.appendChild(button);
+  return row;
+}
+
+function renderCruller(s) {
+  cruller = s;
+  const list = $('cr-list');
+  list.textContent = '';
+  const chosen = s.found.find((c) => c.selected);
+  const missing = s.selected && !chosen;
+  for (const c of s.found) {
+    const b = document.createElement('button');
+    if (c.selected) { b.textContent = 'Stop'; b.onclick = () => crullerSelect(''); }
+    else { b.textContent = 'Report here'; b.className = 'primary'; b.onclick = () => crullerSelect(c.id); }
+    const detail = [c.host, c.ip, c.version && 'v' + c.version].filter(Boolean).join(' · ');
+    list.appendChild(crullerRow(crullerLabel(c), detail, c.selected, b));
+  }
+  if (missing) {
+    const b = document.createElement('button');
+    b.textContent = 'Forget';
+    b.onclick = () => crullerSelect('');
+    list.appendChild(crullerRow('The chosen Cruller', s.selected + ' · not on the network right now', true, b));
+  }
+  $('cr-empty').hidden = s.found.length > 0 || missing;
+
+  const l = s.last;
+  let state, cls;
+  if (!s.selected) { state = 'Not reporting'; cls = ''; }
+  else if (missing) { state = 'Looking for it'; cls = 'warn'; }
+  else if (!l) { state = 'Waiting for the SVS input'; cls = 'warn'; }
+  else if (l.ok) { state = 'Reporting'; cls = 'ok'; }
+  else if (l.http_status === 409) { state = 'Paired with another bridge'; cls = 'bad'; }
+  else { state = 'Not getting through'; cls = 'bad'; }
+  text('cr-state', state);
+  $('cr-state').className = cls;
+  $('cr-dot').className = 'dot ' + cls;
+  text('cr-to', chosen ? crullerLabel(chosen) : s.selected || '–');
+  text('cr-last', l ? `input ${l.input} · ${duration(l.ago_s)} ago` : '–');
+  text('cr-count', l ? String(l.count) : '–');
+  const err = !s.selected || !l || l.ok ? '' : l.http_status === 409
+    ? `This Cruller is paired with another SVS Bridge${l.paired_with ? ' (' + l.paired_with + ')' : ''}. ` +
+      'Press Unpair in its Cruller tab, and it takes this bridge\'s reports.'
+    : l.error;
+  $('cr-err').hidden = !err;
+  text('cr-err', err);
+}
+
+async function refreshCruller() {
+  clearTimeout(crullerTimer);
+  if (!signedIn || tab !== 'cruller') return;
+  try { renderCruller(await api('/device/cruller')); } catch (e) { /* busy */ }
+  crullerTimer = setTimeout(refreshCruller, 5000);
+}
+
+async function crullerSelect(id) {
+  try {
+    setMsg($('cr-msg'), '');
+    renderCruller(await post('/device/cruller/select', {id}));
+    setTimeout(refreshCruller, 1500);  // the first report goes out right away
+  } catch (err) {
+    setMsg($('cr-msg'), err.message, 'bad');
+  }
+}
+
+$('cr-scan').onclick = async () => {
+  const b = $('cr-scan');
+  b.disabled = true;
+  b.classList.add('spin');
+  try {
+    setMsg($('cr-msg'), '');
+    renderCruller(await post('/device/cruller/scan'));
+  } catch (err) {
+    setMsg($('cr-msg'), err.message, 'bad');
+  }
+  b.disabled = false;
+  b.classList.remove('spin');
+};
+
+// --- SVS serial log -----------------------------------------------------------
+
+let logAfter = 0;
+let logTimer = null;
+
+// Entries carry the bridge's uptime; turn it into this computer's clock
+function logTime(uptimeMs, nowMs) {
+  const d = new Date(Date.now() - (nowMs - uptimeMs));
+  return d.toLocaleTimeString([], {hour12: false}) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+}
+
+// Adds the entries of a GET /device/svs/log (or of a "log" pushed over the socket) to the box.
+// Returns the newest input the SVS reported in them, or null.
+function showLog(r) {
+  const box = $('svs-log');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  if (r.entries.length) {
+    const empty = box.querySelector('.empty');
+    if (empty) empty.remove();
+  }
+  let inputNow = null;
+  for (const e of r.entries) {
+    const m = e.d === '<' && /^SVS (?:NEW|CURRENT) INPUT\D*(\d+)/.exec(e.s);
+    if (m) inputNow = +m[1];
+    // Two polls can overlap (Send starts one while the timer's is in flight), or a poll and the socket:
+    // draw each entry once
+    if (e.seq <= logAfter) continue;
+    const line = document.createElement('div');
+    line.className = e.d === '>' ? 'tx' : e.d === '*' ? 'ev' : 'rx';
+    const arrow = e.d === '>' ? '→' : e.d === '*' ? '•' : '←';
+    line.innerHTML = `<span class="t">${logTime(e.t, r.now)}</span> ${arrow} ${esc(e.s)}`;
+    box.appendChild(line);
+    logAfter = e.seq;
+  }
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+  if (atBottom || box.offsetParent === null) box.scrollTop = box.scrollHeight;
+  return inputNow;
+}
+
+// Without the socket
+async function pollLog() {
+  clearTimeout(logTimer);
+  if (!signedIn) return;
+  let batchFull = false;
+  try {
+    const r = await api(`/device/svs/log?after=${logAfter}`);
+    const inputNow = showLog(r);
+    // The status is polled every 5 s; the log every second and after each command: an input change seen
+    // here is shown at once (the name of the input comes from the layout, the rest with the next status)
+    if (inputNow !== null && svs && svs.connected && svs.current_input !== inputNow) {
+      const li = layout.inputs[inputNow - 1];
+      svs.current_input = inputNow;
+      svs.current_input_name = li && li.name || '';
+      renderSvs(svs);
+      if (!wsLive) refreshSvsNow();
+    }
+    batchFull = r.entries.length >= 100;  // more waiting: fetch again right away
+  } catch (e) { /* busy, restarting or logged out */ }
+  logTimer = wsLive ? null : setTimeout(pollLog, batchFull ? 0 : 1000);
+}
+
+function clearLog() {
+  $('svs-log').innerHTML = '<div class="empty">Nothing yet</div>';
+}
+
+// (Re)starts from the bridge's whole history, e.g. after logging in again
+function startLog() {
+  logAfter = 0;
+  clearLog();
+  pollLog();
+}
+
+$('svs-log-clear').onclick = clearLog;
+
+// --- Live updates -------------------------------------------------------------
+//
+// One WebSocket (/ws, see web_server.cpp) brings what changes on the SVS's side as it happens: the log
+// and the status, pushed by the bridge; the input commands go out on it too, with no request to set up
+// for each. Until it is up, or when it drops, the page polls as before and tries it again, less often
+// each time.
+
+let ws = null;          // open or opening
+let wsLive = false;     // it answered the hello: the log and the status come from it
+let wsRetry = 0, wsTimer = null, wsHeard = 0, wsPinged = 0, wsCfg = '', wsId = 0;
+const wsReplies = new Map();  // command id -> {resolve, reject, timer}
+
+function wsConnect() {
+  clearTimeout(wsTimer);
+  if (!signedIn || ws || !window.WebSocket) return;
+  wsCfg = '';
+  const s = ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  s.onopen = () => {
+    wsHeard = Date.now();
+    s.send(JSON.stringify({type: 'hello', after: logAfter}));
+  };
+  s.onmessage = (e) => {
+    wsHeard = Date.now();
+    let m;
+    try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (!wsLive) {
+      wsLive = true;
+      wsRetry = 0;
+      clearTimeout(logTimer); clearTimeout(svsTimer);
+    }
+    if (m.type === 'svs') {
+      renderSvs(m.svs);
+      // The settings: fetched again when their task, last read or blocker changes
+      const c = JSON.stringify(m.cfg);
+      if (c !== wsCfg) { wsCfg = c; if (!cfgTimer) refreshCfg(); }
+    } else if (m.type === 'log') {
+      showLog(m);
+    } else if (m.type === 'reply') {
+      const w = wsReplies.get(m.id);
+      if (!w) return;
+      wsReplies.delete(m.id);
+      clearTimeout(w.timer);
+      if (m.ok) { w.resolve(m); return; }
+      const err = new Error(m.error);
+      err.status = m.status;
+      w.reject(err);
+    } else if (m.type === 'auth') {
+      showAuth('login');
+    }
+  };
+  s.onclose = () => wsDrop();
+}
+
+// Closed, gone quiet, or signed out: back to polling (if it was up) and try again later
+function wsDrop() {
+  const s = ws, was = wsLive;
+  clearTimeout(wsTimer);
+  ws = null;
+  wsLive = false;
+  if (s) {
+    s.onopen = s.onmessage = s.onclose = null;
+    try { s.close(); } catch (e) { /* already closed */ }
+  }
+  for (const w of wsReplies.values()) { clearTimeout(w.timer); w.reject(new Error('Lost the connection to the bridge')); }
+  wsReplies.clear();
+  if (!signedIn) { wsRetry = 0; return; }
+  if (was) { pollLog(); refreshSvs(); }
+  wsTimer = setTimeout(wsConnect, Math.min(30000, 1000 * 2 ** wsRetry++));
+}
+
+// Every 15 s a ping: the bridge answers at once, so no answer by the next one means the connection is gone
+// (a computer that slept, a Wi-Fi that changed) even if the browser has not noticed
+setInterval(() => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (wsPinged > wsHeard && Date.now() - wsPinged > 10000) { wsDrop(); return; }
+  wsPinged = Date.now();
+  ws.send('{"type":"ping"}');
+}, 15000);
+
+// A command for the SVS, as POST /device/svs/send would
+function svsSend(command) {
+  if (!wsLive) return post('/device/svs/send', {command});
+  return new Promise((resolve, reject) => {
+    const id = ++wsId;
+    const timer = setTimeout(() => {
+      wsReplies.delete(id);
+      reject(new Error('The bridge did not answer'));
+    }, 5000);
+    wsReplies.set(id, {resolve, reject, timer});
+    ws.send(JSON.stringify({type: 'send', id, command}));
+  });
+}
+
+$('svs-send-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const command = $('svs-cmd').value.trim();
+  if (!command) return;
+  try {
+    await svsSend(command);
+    setMsg($('svs-send-msg'), '');
+    $('svs-cmd').select();  // easy to send again or replace
+    if (!wsLive) pollLog();
+  } catch (err) {
+    setMsg($('svs-send-msg'), err.message, 'bad');
+  }
+};
+
+$('svs-restart-btn').onclick = async () => {
+  if (!await askUser('Restart the SVS?', 'Video drops for a moment.', 'Restart')) return;
+  const msg = $('svs-restart-msg');
+  try {
+    await post('/device/svs/restart');
+    setMsg(msg, '');
+    setTimeout(refreshSvs, 3000);  // by then it has printed its banner
+  } catch (e) {
+    setMsg(msg, e.message, 'bad');
+  }
+};
+
+$('svs-probe-btn').onclick = async () => {
+  if (!await askUser('Run the bootloader diagnostics?',
+                     'The SVS restarts a few times over about 15 seconds. Nothing is written.', 'Run diagnostics')) return;
+  try {
+    renderSvs(await post('/device/svs/probe'));
+    refreshSvs();
+  } catch (e) {
+    setMsg($('svs-flash-msg'), e.message, 'bad');
+  }
+};
+
+// The official releases are checked when the menu is opened (the bridge caches
+// them for a minute, as GitHub limits how often it may be asked)
+let svsReleasesAt = 0;
+
+async function svsLoadReleases() {
+  const sel = $('svs-rel');
+  const chosen = sel.value;
+  sel.innerHTML = '<option value="">Checking releases…</option>';
+  try {
+    const releases = await api('/device/svs/releases');
+    svsReleasesAt = Date.now();
+    sel.innerHTML = '<option value="">Official releases…</option>';
+    const latest = releases.find((r) => !r.beta);
+    for (const r of releases) {
+      const opt = document.createElement('option');
+      opt.value = r.name;
+      opt.textContent = r.version + (r === latest ? ' (latest)' : '') + (r.beta ? ' · beta' : '');
+      sel.appendChild(opt);
+    }
+    if (!releases.length) sel.innerHTML = '<option value="">No releases found</option>';
+    sel.value = releases.some((r) => r.name === chosen) ? chosen : '';
+  } catch (e) {
+    sel.innerHTML = '<option value="">Could not check releases</option>';
+    if (e.status !== 401) setMsg($('svs-msg'), 'Could not check the official releases: ' + e.message, 'bad');
+  }
+}
+
+const svsReleasesStale = () => Date.now() - svsReleasesAt > 60000;
+
+// Mouse: hold the menu until the list is in, then open it
+$('svs-rel').addEventListener('mousedown', async (e) => {
+  if (!svsReleasesStale()) return;
+  e.preventDefault();
+  await svsLoadReleases();
+  try { $('svs-rel').showPicker(); } catch (err) { $('svs-rel').focus(); }
+});
+// Keyboard: refresh when the menu gets focus
+$('svs-rel').addEventListener('focus', () => { if (svsReleasesStale()) svsLoadReleases(); });
+
+// Stages a firmware on the bridge. The details and Flash SVS only show up once
+// the bridge has checked it; on failure nothing stays staged.
+async function stageSvsFirmware(label, request) {
+  svsStaging = true;
+  if (svs) renderSvs(svs);
+  setMsg($('svs-msg'), label);
+  try {
+    const s = await request();
+    svsStaging = false;
+    setMsg($('svs-msg'), '');
+    renderSvs(s);
+  } catch (e) {
+    svsStaging = false;
+    setMsg($('svs-msg'), e.message, 'bad');
+    refreshSvs();
+  }
+}
+
+$('svs-rel').onchange = () => {
+  const name = $('svs-rel').value;
+  if (!name) return;
+  stageSvsFirmware(`Downloading and checking ${name}…`,
+                   () => post('/device/svs/firmware/official', {name}));
+};
+
+$('svs-file-btn').onclick = () => $('svs-file').click();
+$('svs-file').onchange = async () => {
+  const file = $('svs-file').files[0];
+  $('svs-file').value = '';
+  if (!file) return;
+  $('svs-rel').value = '';
+  const body = await file.text();
+  stageSvsFirmware(`Checking ${file.name}…`, () => api('/device/svs/firmware', {
+    method: 'POST',
+    headers: {'Content-Type': 'text/plain', 'X-File-Name': file.name.slice(0, 60)},
+    body,
+  }));
+};
+
+// Waits for the bridge's check or preview to end, showing its phase over the page (up to 90 s)
+async function svsTaskDone(title) {
+  const until = Date.now() + 90000;
+  while (Date.now() < until) {
+    await sleep(500);
+    let s;
+    try { s = await api('/device/svs'); } catch (e) { continue; }  // busy: ask again
+    renderSvs(s);
+    if (s.update.task === 'idle') return s;
+    busy({mode: 'spin', title, text: s.update.phase + '…\nDo not unplug the SVS or the bridge.'});
+  }
+  throw new Error('The bridge did not finish checking the SVS');
+}
+
+// Update SVS: every time, the same steps. The bootloader is identified, a vector bootloader has its reset
+// vector patch checked against the chip (both write nothing), and only then is the firmware written.
+// Each step stops the rest if it fails.
+$('svs-flash-btn').onclick = async () => {
+  const img = svs.update.image;
+  if (!await askUser(`Update the SVS to ${img.source}?`,
+                     'The bridge checks the SVS’s bootloader, writes the firmware and reads it back. The SVS restarts ' +
+                     `a few times, so video drops.\n\nSHA-256 ${img.sha256}\n\nDo not unplug the SVS or the bridge until it finishes.`,
+                     'Update SVS', true)) return;
+  const fail = (title, why) => busy({mode: 'bad', title, text: why + '\n\nNothing was written to the SVS.', actions: [closeAction]});
+  svsUpdating = true;
+  renderSvs(svs);
+  try {
+    busy({mode: 'spin', title: 'Identifying the SVS’s bootloader', text: 'Restarting the SVS…'});
+    renderSvs(await post('/device/svs/check'));
+    let s = await svsTaskDone('Identifying the SVS’s bootloader');
+    const d = s.update.device;
+    if (!d.checked || !d.compatible) { fail('The SVS cannot be updated', d.checked ? d.problem : s.update.result); return; }
+    if (d.vector) {
+      busy({mode: 'spin', title: 'Checking the reset vector', text: 'Restarting the SVS…'});
+      renderSvs(await post('/device/svs/preview'));
+      s = await svsTaskDone('Checking the reset vector');
+      if (!s.update.device.vector_verified) { fail('The reset vector did not check out', s.update.result); return; }
+    }
+    if (!s.update.can_flash) { fail('The SVS cannot be updated', s.update.blocker); return; }
+    // From here the progress and the outcome come with the status (renderSvs)
+    renderSvs(await post('/device/svs/firmware/flash'));
+    refreshSvs();
+  } catch (e) {
+    fail('The SVS cannot be updated', e.message);
+  } finally {
+    svsUpdating = false;
+    if (svs) renderSvs(svs);
+  }
+};
+
+// --- Wi-Fi ------------------------------------------------------------------
+
+function signalBars(rssi) {
+  const level = rssi >= -55 ? 4 : rssi >= -65 ? 3 : rssi >= -75 ? 2 : 1;
+  let svg = `<svg class="bars" viewBox="0 0 16 12" width="16" height="12"><title>${rssi} dBm</title>`;
+  for (let i = 0; i < 4; i++) {
+    const h = 3 + i * 3;
+    svg += `<rect x="${i * 4}" y="${12 - h}" width="3" height="${h}" rx="0.5" fill="currentColor"` +
+           ` opacity="${i < level ? 1 : 0.25}"/>`;
+  }
+  return svg + '</svg>';
+}
+
+// Network picker: type to filter the scanned networks, or enter a hidden
+// one by name. The scan button next to it refreshes the list. The first
+// opening scans; a 401 is handled by api() (back to the login form).
+function networkCombo(onPick) {
+  const input = $('ssid'), list = $('ssid-list'), scanBtn = $('scan-btn');
+  let nets = null, scanning = false, active = -1, shown = [];
+
+  function draw() {
+    list.innerHTML = '';
+    if (scanning && !nets) {
+      list.innerHTML = '<li class="note">Scanning…</li>';
+      return;
+    }
+    const q = input.value.trim().toLowerCase();
+    shown = (nets || []).filter((n) => !q || n.ssid.toLowerCase().includes(q));
+    shown.forEach((n, i) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      if (i === active) li.className = 'active';
+      li.innerHTML = `<span class="name">${esc(n.ssid)}</span>${n.secure ? LOCK : ''}${signalBars(n.rssi)}`;
+      li.onclick = () => pick(n);
+      list.appendChild(li);
+    });
+    if (!shown.length) {
+      const note = q ? 'No match; it will be used as typed' : 'No networks found';
+      list.innerHTML = `<li class="note">${note}</li>`;
+    }
+  }
+
+  async function scan() {
+    scanning = true;
+    scanBtn.disabled = true;
+    scanBtn.classList.add('spin');
+    draw();
+    try {
+      nets = await api('/device/scan');
+    } catch (e) {
+      nets = nets || [];
+      if (e.status !== 401) setMsg($('wifi-msg'), 'Scan failed: ' + e.message, 'bad');
+    }
+    scanning = false;
+    scanBtn.disabled = false;
+    scanBtn.classList.remove('spin');
+    active = -1;
+    if (!list.hidden) draw();
+  }
+
+  function open() {
+    list.hidden = false;
+    if (!nets && !scanning) scan(); else draw();
+  }
+  function close() { list.hidden = true; active = -1; }
+  function pick(n) { input.value = n.ssid; close(); onPick(n); }
+
+  // Keep focus in the input while using the list, so picking works
+  list.addEventListener('mousedown', (e) => e.preventDefault());
+  input.addEventListener('focus', open);
+  input.addEventListener('blur', close);
+  input.addEventListener('input', () => { active = -1; list.hidden = false; draw(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') {
+      if (list.hidden) { open(); return; }
+      active = Math.min(active + 1, shown.length - 1);
+      draw();
+      e.preventDefault();
+    } else if (e.key === 'ArrowUp') {
+      active = Math.max(active - 1, 0);
+      draw();
+      e.preventDefault();
+    } else if (e.key === 'Enter' && !list.hidden && active >= 0) {
+      pick(shown[active]);
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  });
+  $('ssid-toggle').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (list.hidden) { input.focus(); open(); } else { close(); }
+  });
+  scanBtn.addEventListener('mousedown', (e) => e.preventDefault());  // keep the list open
+  scanBtn.onclick = scan;
+  return {scan};
+}
+
+networkCombo(() => $('password').focus());
+
+$('wifi-change').onclick = () => {
+  const form = $('wifi-form');
+  form.hidden = !form.hidden;
+  $('wifi-change').textContent = form.hidden ? 'Change network' : 'Cancel';
+  if (!form.hidden) $('ssid').focus();
+};
+
+$('wifi-form').onsubmit = async (e) => {
+  e.preventDefault();
+  const ssid = $('ssid').value.trim();
+  const msg = $('wifi-msg');
+  if (!ssid) { setMsg(msg, 'Enter a network name', 'bad'); return; }
+  $('wifi-btn').disabled = true;
+  setMsg(msg, 'Connecting to ' + ssid + '…');
+  try {
+    await post('/device/wifi', {ssid, password: $('password').value});
+    // Wait for the connection result
+    for (let i = 0; i < 20; i++) {
+      await sleep(1500);
+      await refresh();
+      if (status && status.wifi.connected && status.wifi.ssid === ssid) {
+        setMsg(msg, `Connected (${status.wifi.ip}). Open https://${status.wifi.hostname} ` +
+                    'from that network.', 'ok');
+        $('wifi-btn').disabled = false;
+        return;
+      }
+    }
+    setMsg(msg, 'Could not connect. Check the password and try again.', 'bad');
+  } catch (err) {
+    setMsg(msg, 'Error: ' + err.message, 'bad');
+  }
+  $('wifi-btn').disabled = false;
+};
+
+// --- Bridge firmware --------------------------------------------------------
+
+// ESP-IDF app image layout: 24-byte image header (chip id at 12), 8-byte
+// segment header, then esp_app_desc_t (magic, version, project, time, date, idf)
+const ESP32S3_CHIP_ID = 9;
+const APP_DESC = 32;
+const APP_DESC_MAGIC = 0xABCD5432;
+
+function cString(bytes, offset, length) {
+  const b = bytes.subarray(offset, offset + length);
+  const end = b.indexOf(0);
+  return new TextDecoder().decode(end < 0 ? b : b.subarray(0, end));
+}
+
+// Reads the app description of a firmware file, or throws why it is not one
+async function readAppImage(file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  if (bytes.length < APP_DESC + 256 || bytes[0] !== 0xE9) throw new Error('Not an ESP-IDF firmware image');
+  const view = new DataView(bytes.buffer);
+  if (view.getUint32(APP_DESC, true) !== APP_DESC_MAGIC) throw new Error('Not an ESP-IDF firmware image');
+  if (view.getUint16(12, true) !== ESP32S3_CHIP_ID) throw new Error('This firmware is for a different chip');
+  const app = {
+    version: cString(bytes, APP_DESC + 16, 32),
+    project: cString(bytes, APP_DESC + 48, 32),
+    time: cString(bytes, APP_DESC + 80, 16),
+    date: cString(bytes, APP_DESC + 96, 16),
+    idf: cString(bytes, APP_DESC + 112, 32),
+    size: bytes.length,
+  };
+  if (status && app.project !== status.firmware.project) {
+    throw new Error(`This is a "${app.project}" firmware, not ${status.firmware.project}`);
+  }
+  const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  app.sha256 = [...hash].map((b) => b.toString(16).padStart(2, '0')).join('');
+  return app;
+}
+
+$('fw-file-btn').onclick = () => $('fw-file').click();
+
+$('fw-file').onchange = async () => {
+  const file = $('fw-file').files[0];
+  $('fw-file').value = '';
+  setMsg($('fw-msg'), '');
+  if (!file) return;
+  let img;
+  try {
+    img = await readAppImage(file);
+  } catch (e) {
+    setMsg($('fw-msg'), file.name + ': ' + e.message, 'bad');
+    return;
+  }
+  const current = status ? status.firmware.version : '?';
+  if (!await askUser(`Install ${img.project} ${img.version}?`,
+                     `Running ${current} now.\n\nBuilt ${img.date} ${img.time} · ESP-IDF ${img.idf}\n` +
+                     `${img.size.toLocaleString()} bytes\nSHA-256 ${img.sha256}\n\n` +
+                     'The bridge restarts into it, and goes back to the current version if it fails to start.',
+                     'Install', true)) return;
+  uploadFirmware(file, img.version);
+};
+
+// Uploads an image to /device/ota; the ring follows the upload
+function uploadFirmware(file, version) {
+  const before = status ? status.firmware.partition : null;
+  const started = Date.now();
+  const secs = (t) => Math.round((Date.now() - t) / 1000);
+  let uploaded = 0;
+  busy({mode: 'progress', frac: 0, title: 'Installing ' + version, text: 'Sending it to the bridge…'});
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/device/ota');
+  xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+  xhr.upload.onprogress = (e) => {
+    if (!e.lengthComputable) return;
+    busy({mode: 'progress', frac: e.loaded / e.total, title: 'Installing ' + version,
+          text: `Sending it to the bridge: ${(e.loaded / 1048576).toFixed(2)} of ${(e.total / 1048576).toFixed(2)} MB`});
+  };
+  // The upload is done; the bridge now checks the whole image and switches to it
+  xhr.upload.onload = () => {
+    uploaded = Date.now();
+    busy({mode: 'spin', title: 'Installing ' + version, text: `Uploaded in ${secs(started)} s. Checking and installing…`});
+  };
+  xhr.onload = () => {
+    if (xhr.status === 401) { busyHide(); showAuth('login'); return; }
+    if (xhr.status !== 200) {
+      let t = xhr.responseText;
+      try { t = JSON.parse(t).error || t; } catch (e) { /* plain text */ }
+      busy({mode: 'bad', title: 'The update failed', text: t || xhr.statusText, actions: [closeAction]});
+      return;
+    }
+    const took = uploaded ? `Upload ${Math.round((uploaded - started) / 1000)} s, install ${secs(uploaded)} s.` : '';
+    waitForReboot({partition: before, version}, 'Restarting into ' + version + '…', took);
+  };
+  xhr.onerror = () => busy({mode: 'bad', title: 'The connection to the bridge dropped',
+                            text: 'The update did not finish; the bridge keeps its current firmware.', actions: [closeAction]});
+  xhr.send(file);
+}
+
+// Waits for the bridge to come back. After an update, the new firmware runs
+// from the other OTA slot; still running from the old slot means it failed
+// to start and was rolled back. The session is gone after a restart, so this
+// ends at the login form.
+async function waitForReboot(update, title, detail) {
+  const started = Date.now();
+  const limit = 120000;  // Wi-Fi reconnection can take a while
+  const base = (detail ? detail + '\n' : '') + (update ? 'The bridge keeps the new firmware once it runs.' : 'The page reconnects by itself.');
+  const tick = () => busy({mode: 'spin', title, text: base + `\n${Math.round((Date.now() - started) / 1000)} s`});
+  tick();
+  const timer = setInterval(tick, 1000);
+  await sleep(4000);  // let it actually go down first
+  let s = null;
+  while (!s && Date.now() - started < limit) {
+    // Short timeout: while the bridge is down, a request can otherwise hang
+    // for a long time before the browser gives up
+    const abort = new AbortController();
+    const t = setTimeout(() => abort.abort(), 3000);
+    try {
+      const res = await fetch('/api/status', {signal: abort.signal, cache: 'no-store'});
+      if (res.ok) s = await res.json();
+    } catch (e) { /* still restarting */ }
+    clearTimeout(t);
+    if (!s) await sleep(1000);
+  }
+  clearInterval(timer);
+  if (s) {
+    // Reload so the page itself comes from the firmware now running (after
+    // an update it may differ); the outcome is shown at the login form
+    let note = {text: 'The bridge restarted. Log in again.', cls: 'ok'};
+    let result = {mode: 'ok', title: 'The bridge is back'};
+    if (update && s.firmware.partition === update.partition) {
+      note = {text: `The new firmware did not start; the bridge went back to ${s.firmware.version}. Log in again.`, cls: 'bad'};
+      result = {mode: 'bad', title: 'Rolled back to ' + s.firmware.version};
+    } else if (update) {
+      note = {text: `The bridge now runs ${s.firmware.version}. Log in again.`, cls: 'ok'};
+      result = {mode: 'ok', title: 'The bridge runs ' + s.firmware.version};
+    }
+    busy(Object.assign(result, {text: 'Reloading the page…'}));
+    try { sessionStorage.setItem('loginNote', JSON.stringify(note)); } catch (e) { /* ignore */ }
+    await sleep(1200);
+    location.reload();
+    return;
+  }
+  busy({mode: 'bad', title: 'Taking longer than expected',
+        text: 'The bridge has not answered for two minutes. Check that it has power, then reload.' +
+              (update ? ' If the new firmware does not start, it goes back to the previous one by itself.' : ''),
+        actions: [{label: 'Reload', primary: true, onclick: () => location.reload()}]});
+}
+
+$('reboot-btn').onclick = async () => {
+  if (!await askUser('Restart the bridge?', 'The page reconnects by itself; log in again afterwards.', 'Restart')) return;
+  busy({mode: 'spin', title: 'Restarting the bridge…', text: 'Asking it to restart.'});
+  try {
+    await post('/device/reboot');
+  } catch (e) {
+    busy({mode: 'bad', title: 'It did not work', text: e.message, actions: [closeAction]});
+    return;
+  }
+  waitForReboot(null, 'Restarting the bridge…');
+};
+
+$('reset-btn').onclick = async () => {
+  if (!await askUser('Factory reset?', 'Erases the Wi-Fi settings, the admin password and the certificate, and ' +
+                     'restarts in setup mode. You will need to set up the bridge again.', 'Erase and restart', true)) return;
+  busy({mode: 'spin', title: 'Erasing settings…', text: 'Wi-Fi, admin password and certificate.'});
+  try {
+    await post('/device/factory-reset');
+  } catch (e) {
+    busy({mode: 'bad', title: 'Factory reset failed', text: e.message, actions: [closeAction]});
+    return;
+  }
+  const ap = status ? status.wifi.ap_ssid : 'SVS-Bridge-XXXX';
+  busy({mode: 'ok', title: 'The bridge is ready to set up',
+        text: `On your phone or computer, join the Wi-Fi network\n"${ap}".\n\nThe setup opens by itself (or browse to 192.168.4.1).`});
+};
+
+// --- Bridge firmware from GitHub --------------------------------------------
+
+let fwLoaded = false;
+
+// "0.3.10" vs "0.3.9": -1, 0, 1. A pre-release comes before its release, and pre-releases compare by N,
+// CI's run number, whatever their label: 0.3.3-pr.40 < 0.3.3-alpha.41 < 0.3.3 (as in Cruller).
+function cmpVersion(a, b) {
+  const [ca, pa] = a.split('-'), [cb, pb] = b.split('-');
+  const x = ca.split('.').map(Number), y = cb.split('.').map(Number);
+  for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0) ? -1 : 1;
+  if (!pa || !pb) return pa ? -1 : pb ? 1 : 0;
+  const na = Number(pa.split('.').pop()), nb = Number(pb.split('.').pop());
+  return na === nb ? 0 : na < nb ? -1 : 1;
+}
+async function fwLoadReleases(force) {
+  if (fwLoaded && !force) return;
+  fwLoaded = true;
+  const sel = $('fw-rel'), btn = $('fw-gh-btn'), ref = $('fw-refresh');
+  sel.innerHTML = '<option value="">Checking GitHub…</option>';
+  text('fw-state', 'Checking GitHub…');
+  btn.disabled = true;
+  ref.disabled = true;
+  ref.classList.add('spin');
+  try {
+    const data = await api('/device/releases');
+    sel.innerHTML = '';
+    const list = data.releases || [];
+    const running = data.running;
+    for (const r of list) {
+      const o = document.createElement('option');
+      const c = cmpVersion(r.tag.replace(/^v/, ''), running);
+      o.value = r.tag;
+      o.dataset.notes = r.notes_url || '';
+      o.textContent = r.tag + (r.prerelease ? ' · alpha' : '') + (c === 0 ? ' · installed' : c < 0 ? ' · older' : '');
+      sel.appendChild(o);
+    }
+    if (!list.length) sel.innerHTML = '<option value="">No releases found</option>';
+    // Alphas (develop builds) are suggested only to a bridge already running one; any can be picked.
+    const onAlpha = running.includes('-');
+    const newer = list.find((r) => (onAlpha || !r.prerelease) && cmpVersion(r.tag.replace(/^v/, ''), running) > 0);
+    if (newer) sel.value = newer.tag;
+    else if (list.some((r) => r.tag.replace(/^v/, '') === running)) sel.value = list.find((r) => r.tag.replace(/^v/, '') === running).tag;
+    text('fw-state', !list.length ? 'No releases yet' : newer ? newer.tag.replace(/^v/, '') + ' available' : 'Up to date (' + running + ')');
+    fwShow();
+  } catch (e) {
+    fwLoaded = false;
+    sel.innerHTML = '<option value="">Unavailable</option>';
+    text('fw-state', 'Could not read the releases from GitHub');
+    if (e.status !== 401) setMsg($('fw-msg'), e.message, 'warn');
+  } finally {
+    ref.disabled = false;
+    ref.classList.remove('spin');
+  }
+}
+
+function fwShow() {
+  const o = $('fw-rel').selectedOptions[0];
+  $('fw-gh-btn').disabled = !o || !o.value;
+  $('fw-notes').href = (o && o.dataset.notes) || 'https://github.com/margaale/svs-bridge/releases';
+}
+
+$('fw-rel').onchange = fwShow;
+$('fw-refresh').onclick = () => { setMsg($('fw-msg'), ''); fwLoadReleases(true); };
+
+$('fw-gh-btn').onclick = async () => {
+  const tag = $('fw-rel').value;
+  if (!tag) return;
+  if (!await askUser(`Install ${tag}?`, 'The bridge downloads it from GitHub, checks it and restarts into it.',
+                     'Download and install', true)) return;
+  const before = status ? status.firmware.partition : null;
+  const fail = (t) => busy({mode: 'bad', title: 'The update failed', text: t, actions: [closeAction]});
+  busy({mode: 'progress', frac: 0, title: 'Downloading ' + tag, text: 'The bridge downloads it from GitHub.'});
+
+  // The bridge downloads server-side and streams progress back as chunked text:
+  // a percentage per line, then "done" or "err:<message>".
+  let res;
+  try {
+    res = await fetch('/device/ota/github', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({tag}),
+    });
+  } catch (e) { fail('The connection to the bridge dropped.'); return; }
+  if (res.status === 401) { busyHide(); showAuth('login'); return; }
+  if (!res.ok) {
+    let t = await res.text();
+    try { t = JSON.parse(t).error || t; } catch (e) { /* plain text */ }
+    fail(t || res.statusText);
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '', error = null;
+  for (;;) {
+    let chunk;
+    try { chunk = await reader.read(); } catch (e) { break; }  // device rebooted
+    if (chunk.done) break;
+    buf += dec.decode(chunk.value, {stream: true});
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line.startsWith('err:')) {
+        error = line.slice(4);
+      } else if (/^\d+$/.test(line)) {
+        const pct = +line;
+        if (pct < 100) busy({mode: 'progress', frac: pct / 100, title: 'Downloading ' + tag, text: 'The bridge downloads it from GitHub.'});
+        else busy({mode: 'spin', title: 'Installing ' + tag, text: 'Checking and installing…'});
+      }
+    }
+  }
+  if (error) { fail(error); return; }
+  waitForReboot({partition: before, version: tag}, 'Restarting into ' + tag + '…');
+};
+
+// --- Init -------------------------------------------------------------------
+
+// Outcome of a restart that reloaded the page (see waitForReboot)
+try {
+  const note = JSON.parse(sessionStorage.getItem('loginNote') || 'null');
+  sessionStorage.removeItem('loginNote');
+  if (note) setMsg($('login-msg'), note.text, note.cls);
+} catch (e) { /* ignore */ }
+
+(async () => {
+  try {
+    const a = await api('/device/auth');
+    showAuth(a.authenticated ? 'app' : a.password_set ? 'login' : 'create');
+  } catch (e) {
+    showAuth('login');
+  }
+})();
+setInterval(() => { if (signedIn) { refresh(); renderCfgBar(); } }, 5000);  // the bar: how long ago the settings were read
+</script>
+</body>
+</html>

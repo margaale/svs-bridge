@@ -1,13 +1,25 @@
-# GitVersion computes the firmware version from git history (GitFlow):
-#   master  -> x.y.z            (clean stable; each release bumps the PATCH)
-#   develop -> x.y.z-alpha.N    (prerelease previews of the next release)
-# Override a bump with a "+semver: minor" (or "+semver: major") commit message.
-# The `main` branch config also matches `master`.
+# The bridge's version (.github/workflows/build.yml), same scheme as Cruller:
+#   master:        every push is a release, vX.Y.Z; the patch grows with each one.
+#   develop:       every push is a pre-release, vX.Y.Z-alpha.N, to try on a board.
+#   pull requests: X.Y.Z-pr.N, built but not published (the images are on the run).
+# N is CI's run number (.github/workflows/build.yml), not a commit count: pull requests are
+# squash-merged, so only the run number keeps growing across branches.
+# A line "+semver: minor" or "+semver: major" in a commit message bumps more; only at the start of a
+# line, so a message that merely mentions them doesn't.
 workflow: GitFlow/v1
-next-version: 0.1.0
+next-version: 0.2.0
+tag-prefix: '[vV]?'
+major-version-bump-message: '(?m)^\s*\+semver:\s?(breaking|major)\b'
+minor-version-bump-message: '(?m)^\s*\+semver:\s?(feature|minor)\b'
+patch-version-bump-message: '(?m)^\s*\+semver:\s?(fix|patch)\b'
+no-bump-message: '(?m)^\s*\+semver:\s?(none|skip)\b'
 branches:
   main:
     increment: Patch
   develop:
-    increment: Patch
     label: alpha
+    increment: Patch
+    deployment-mode: ContinuousDeployment
+  pull-request:
+    label: pr
+    deployment-mode: ContinuousDeployment
