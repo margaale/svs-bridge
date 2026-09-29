@@ -131,6 +131,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 .mod .led{width:9px;height:9px;border-radius:50%;background:#33363B;box-shadow:inset 0 0 0 1px #0007;flex:none}
 .mod .led.g.on{background:var(--ok);box-shadow:0 0 8px 1px var(--ok)}
 .mod .led.b.on{background:var(--blue);box-shadow:0 0 8px 1px var(--blue)}
+.mod .led.r.on{background:#E0453F;box-shadow:0 0 8px 1px #E0453F}
 .mod.pend .mk,.mod.pend .mn{font-style:italic}  /* changes not saved to the SVS yet */
 .mod.sel{background:#3A1E2A;border-color:var(--accent)}
 .mod.dragging{position:relative;z-index:5;box-shadow:0 12px 28px #000a;cursor:grabbing;transition:none}
@@ -755,6 +756,7 @@ async function navSend(command) {
     await post('/device/svs/send', {command});
     setMsg($('nav-msg'), '');
     pollLog();
+    setTimeout(pollLog, 350);  // the SVS answers within ~100 ms: show the new input without waiting for the timer
   } catch (err) {
     setMsg($('nav-msg'), err.message, 'bad');
   }
@@ -875,6 +877,12 @@ function renderSvs(s) {
   }
 }
 let svsFlashSeen = false;
+
+// The status once, without touching the polling timer
+async function refreshSvsNow() {
+  if (!signedIn) return;
+  try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
+}
 
 let svsTimer = null;
 async function refreshSvs() {
@@ -1168,11 +1176,13 @@ function renderStack() {
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
   }).join('');
   const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
+  const on = !!(svs && svs.connected);  // the control module is powered when the bridge sees the SVS
   $('stack').innerHTML =
     `<div class="sgroup outs"><div class="shead"><span class="small">set by you · ${nOut} of up to ${MAX_OUTPUTS}</span><h2 class="out">Outputs</h2></div>` +
     `<div class="stiles" data-group="out">${add}${outs}</div></div><div class="ssep"></div>` +
     `<div class="sgroup ctl"><h2 class="ctl">Control</h2><div class="stiles">` +
-    modTile({t: 'ctl', i: 0, sel: sel.t === 'ctl', svg: face('control', 'ctl', {tag: 'CTRL'}), kind: 'CONTROL', color: 'var(--accent)', name: fw, aria: 'Control module'}) +
+    modTile({t: 'ctl', i: 0, sel: sel.t === 'ctl', svg: face('control', 'ctl', {tag: 'CTRL'}), kind: 'CONTROL', color: 'var(--accent)', name: fw, aria: 'Control module' + (on ? ', on' : ''),
+                    led: {color: 'r', on, label: on ? 'On: the SVS is connected to the bridge' : 'Off: no SVS connected to the bridge'}}) +
     `</div></div><div class="ssep"></div>` +
     `<div class="sgroup ins"><div class="shead"><h2>Inputs</h2><span class="small">${n ? (svs && svs.total_inputs > 0 ? 'the SVS reports ' + n : n + ' last known') : 'the SVS has not said how many yet'}</span></div>` +
     `<div class="stiles" data-group="in">${ins}</div></div>`;
@@ -1669,7 +1679,10 @@ async function pollLog() {
       const empty = box.querySelector('.empty');
       if (empty) empty.remove();
     }
+    let inputNow = null;  // the newest input the SVS reported in these entries
     for (const e of r.entries) {
+      const m = e.d === '<' && /^SVS (?:NEW|CURRENT) INPUT\D*(\d+)/.exec(e.s);
+      if (m) inputNow = +m[1];
       // Two polls can overlap (Send starts one while the timer's is in flight): draw each entry once
       if (e.seq <= logAfter) continue;
       const line = document.createElement('div');
@@ -1678,6 +1691,15 @@ async function pollLog() {
       line.innerHTML = `<span class="t">${logTime(e.t, r.now)}</span> ${arrow} ${esc(e.s)}`;
       box.appendChild(line);
       logAfter = e.seq;
+    }
+    // The status is polled every 5 s; the log every second and after each command: an input change seen
+    // here is shown at once (the name of the input comes from the layout, the rest with the next status)
+    if (inputNow !== null && svs && svs.connected && svs.current_input !== inputNow) {
+      const li = layout.inputs[inputNow - 1];
+      svs.current_input = inputNow;
+      svs.current_input_name = li && li.name || '';
+      renderSvs(svs);
+      refreshSvsNow();
     }
     while (box.childElementCount > 500) box.firstElementChild.remove();
     if (atBottom || box.offsetParent === null) box.scrollTop = box.scrollHeight;
