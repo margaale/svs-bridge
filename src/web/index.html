@@ -1226,6 +1226,19 @@ function renderInspector() {
     const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
     const txFit = (t) => !!(snap && snap.transcoders[t]);
     const needKind = 'Pick the module fitted here first';
+    // The options this module cannot have are left out. Until the settings are read, which modules are
+    // V3 and which transcoders are fitted is not known: those options show, waiting for the read.
+    // Sync on green: V3 SCART and V3 VGA modules; sync bypass: V3 SCART only (the SVS ignores both elsewhere)
+    const maybeV3 = (kinds) => snap ? k.v3 && kinds.includes(k.kind) : k.unset || kinds.includes(k.kind);
+    // A transcoder, if fitted and the module has that signal. One that is on for a module without it
+    // stays, so it can be turned off (it would convert the wrong signal).
+    const txOn = (key) => !!(e && e[key]) || !!(r && r[i] && r[i][key]);
+    const txRow = (key, label, takes, hint, what) => {
+      if (snap && !txFit(key)) return '';
+      const wrong = !k.unset && !takes;
+      if (wrong && !txOn(key)) return '';
+      return optRow(i, key, label, takes || txOn(key), wrong ? `This module has no ${what} to convert: turn it off` : hint, needKind);
+    };
     const module = k.v3
       ? `<div class="detected">${face(k.kind, 'in', {tag: 'V3'})}<div><b style="font-size:14px">${k.name} module</b>` +
         `<div class="small" style="color:#9FD8B4">Recognised by the SVS: V3 modules report themselves.</div></div></div>`
@@ -1249,10 +1262,10 @@ function renderInspector() {
       `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
-      optRow(i, 'rgb_to_ypbpr', 'RGB → YPbPr', txFit('rgb_to_ypbpr') && isRgb, 'Send this input out as component', !txFit('rgb_to_ypbpr') ? 'No RGB → YPbPr transcoder fitted' : k.unset ? needKind : 'This module has no RGB to convert') +
-      optRow(i, 'ypbpr_to_rgb', 'YPbPr → RGB', txFit('ypbpr_to_rgb') && isYpbpr, 'Send this input out as RGB', !txFit('ypbpr_to_rgb') ? 'No YPbPr → RGB transcoder fitted' : k.unset ? needKind : 'This module has no YPbPr to convert') +
-      optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', 'Only V3 SCART and V3 VGA modules') +
-      optRow(i, 'sync_bypass', 'Sync bypass', k.v3 && k.kind === 'scart', 'Pass the console’s sync untouched', 'Only V3 SCART modules') +
+      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, 'Send this input out as component', 'RGB') +
+      txRow('ypbpr_to_rgb', 'YPbPr → RGB', isYpbpr, 'Send this input out as RGB', 'YPbPr') +
+      (maybeV3(['scart', 'vga']) ? optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', '') : '') +
+      (maybeV3(['scart']) ? optRow(i, 'sync_bypass', 'Sync bypass', k.v3, 'Pass the console’s sync untouched', '') : '') +
       optRow(i, 'auto_profile', 'Auto profile', true, 'Send the scaler this input’s profile and IR codes when it comes on', '') +
       `</div></div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">IR codes <span class="small">· sent to the scaler when input ${i + 1} comes on${snap ? ' · ' + codes.length + ' of ' + snap.ir_slots : ''}</span>${irChanged ? '<span class="chg">changed</span>' : ''}</span>` +
