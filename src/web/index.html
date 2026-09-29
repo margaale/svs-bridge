@@ -1120,6 +1120,9 @@ function syncEdits() {
   if (!snap) { edits = null; editsSeq = -1; return; }
   if (snap.seq !== editsSeq) {
     edits = JSON.parse(JSON.stringify(snap.settings));
+    // Auto profile off is for HDMI modules (a console on an analog and an HDMI input at once: which one
+    // loads its profile), and the bridge knows of none: every input keeps it on, one read off is a change
+    for (const s of edits) s.auto_profile = true;
     editsSeq = snap.seq;
   }
 }
@@ -1226,7 +1229,8 @@ function renderInspector() {
   if (sel.t === 'in') {
     const i = sel.i, k = inputKind(i), li = layoutInput(i), lit = svs && svs.current_input === i + 1;
     const e = edits && edits[i], r = readSettings();
-    const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
+    // A component module carries RGB too: a PS2 set to RGB sends it (sync on green) over its component cable
+    const isRgb = ['scart', 'vga', 'component'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
     const txFit = (t) => !!(snap && snap.transcoders[t]);
     const needKind = 'Pick the module fitted here first';
     // The options this module cannot have are left out. Until the settings are read, which modules are
@@ -1265,11 +1269,12 @@ function renderInspector() {
       `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
-      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, 'Send this input out as component', 'RGB') +
+      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, k.kind === 'component' ? 'For RGB over a component cable (a PS2 set to RGB): send it out as component'
+        : 'Send this input out as component', 'RGB') +
       txRow('ypbpr_to_rgb', 'YPbPr → RGB', isYpbpr, 'Send this input out as RGB', 'YPbPr') +
       (maybeV3(['scart', 'vga']) ? optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', '') : '') +
       (maybeV3(['scart']) ? optRow(i, 'sync_bypass', 'Sync bypass', k.v3, 'Pass the console’s sync untouched', '') : '') +
-      optRow(i, 'auto_profile', 'Auto profile', true, 'Send the scaler this input’s profile and IR codes when it comes on', '') +
+      optRow(i, 'auto_profile', 'Auto profile', false, '', 'Always on: the scaler gets this input’s profile and IR codes when it comes on (off is for HDMI modules)') +
       `</div></div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">IR codes <span class="small">· sent to the scaler when input ${i + 1} comes on${snap ? ' · ' + codes.length + ' of ' + snap.ir_slots : ''}</span>${irChanged ? '<span class="chg">changed</span>' : ''}</span>` +
       `<div class="irbox"><div class="irs">` + (e ? (codes.length ? codes.map(([a, c], j) =>
