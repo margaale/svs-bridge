@@ -1229,7 +1229,8 @@ function renderInspector() {
   if (sel.t === 'in') {
     const i = sel.i, k = inputKind(i), li = layoutInput(i), lit = svs && svs.current_input === i + 1;
     const e = edits && edits[i], r = readSettings();
-    const isRgb = ['scart', 'vga'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
+    // A component module carries RGB too: a PS2 set to RGB sends it (sync on green) over its component cable
+    const isRgb = ['scart', 'vga', 'component'].includes(k.kind), isYpbpr = ['scart', 'component', 'dterm'].includes(k.kind);
     const txFit = (t) => !!(snap && snap.transcoders[t]);
     const needKind = 'Pick the module fitted here first';
     // The options this module cannot have are left out. Until the settings are read, which modules are
@@ -1268,7 +1269,8 @@ function renderInspector() {
       `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
       `<div class="stack"><span class="lbl">Module</span>${module}</div>` +
       `<div class="stack" style="gap:10px"><span class="lbl">Stored in the SVS <span class="small">· sent when you press Save to the SVS</span></span><div class="opts">` +
-      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, 'Send this input out as component', 'RGB') +
+      txRow('rgb_to_ypbpr', 'RGB → YPbPr', isRgb, k.kind === 'component' ? 'For RGB over a component cable (a PS2 set to RGB): send it out as component'
+        : 'Send this input out as component', 'RGB') +
       txRow('ypbpr_to_rgb', 'YPbPr → RGB', isYpbpr, 'Send this input out as RGB', 'YPbPr') +
       (maybeV3(['scart', 'vga']) ? optRow(i, 'rgsb', 'Sync on green (RGBS → RGsB)', k.v3, 'For displays that want sync on green', '') : '') +
       (maybeV3(['scart']) ? optRow(i, 'sync_bypass', 'Sync bypass', k.v3, 'Pass the console’s sync untouched', '') : '') +
