@@ -1,6 +1,7 @@
 #include "rfc2217.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <string>
 
@@ -21,6 +22,7 @@
 #define TRACE_MS              60000 // how long after connecting what the SVS says is also noted in the log
 #define TRACE_AFTER_TX_MS     3000  // ... and how long after a client sends something
 #define RESTART_MIN_GAP_MS    4000  // a client that reopens its port in a loop can't keep the SVS restarting
+#define ECHO_WAIT_MS          1000  // how long a Y/G answer is waited for before what is held goes out
 #define CLIENT_LINE_MAX       128
 #define KEEPALIVE_IDLE_S      30  // TCP keepalive (see add_client)
 #define KEEPALIVE_INTERVAL_S  5
@@ -45,6 +47,8 @@ struct client_t {
     // What it types, for the traffic log only (the bytes themselves go to the SVS as they come)
     uint8_t line[CLIENT_LINE_MAX];
     size_t line_len;
+    rfc2217_echo_t echo;           // drops the input number the SVS puts before the value of Y<n> / G<n>
+    int64_t echo_ms;               // when that was asked
 };
 
 static client_t clients[MAX_CLIENTS];
@@ -137,7 +141,14 @@ static void log_line(client_t *c) {
     c->line_len = 0;
     if (end == start) return;
     c->commands++;
-    note(c, "to the SVS: " + std::string((const char *)c->line + start, end - start));
+    const std::string cmd((const char *)c->line + start, end - start);
+    note(c, "to the SVS: " + cmd);
+    // Y<n> / G<n>: the SVS answers with the input number and then the value; see rfc2217_echo_t
+    if (cmd.size() > 1 && (cmd[0] == 'Y' || cmd[0] == 'G') && cmd.size() < 5 &&
+        cmd.find_first_not_of("0123456789", 1) == std::string::npos) {
+        rfc2217_echo_expect(&c->echo, atoi(cmd.c_str() + 1));
+        c->echo_ms = now_ms();
+    }
 }
 
 // Bytes from the client go to the SVS as they come, like a serial cable: the SVS's own tools send
@@ -208,6 +219,7 @@ static void add_client(int fd, const struct sockaddr_in *peer, uint8_t *buf, siz
     c->port = ntohs(peer->sin_port);
     rfc2217_init(&c->proto);
     c->rx_pos = svs_usb::rx_head();  // from now on, not what came before
+    rfc2217_echo_init(&c->echo);
     c->modem_sent = -1;
     c->line_len = 0;
     const size_t n = rfc2217_greeting(&c->proto, buf, size);
@@ -300,17 +312,27 @@ static void rfc2217_task(void *param) {
                 c->modem_sent = modem;
             }
 
-            // What the SVS says, byte for byte.
-            uint8_t raw[128];
+            // What the SVS says, byte for byte (but for the input number before a Y/G value).
+            uint8_t raw[128], out[sizeof(raw) + RFC2217_ECHO_HOLD_MAX];
+            if (rfc2217_echo_pending(&c->echo) && now_ms() - c->echo_ms > ECHO_WAIT_MS) {
+                const size_t m = rfc2217_echo_release(&c->echo, out, sizeof(out));
+                if (m && !send_text(c, std::string((const char *)out, m))) {
+                    drop_client(c, "failed");
+                    continue;
+                }
+            }
             for (size_t n; (n = svs_usb::rx_since(c->rx_pos, raw, sizeof(raw))) > 0;) {
+                const uint32_t dropped = c->echo.dropped;
+                const size_t m = rfc2217_echo_filter(&c->echo, raw, n, out, sizeof(out));
                 // What the client is given is noted for the first minute of a connection and for a few
                 // seconds after it sends something: tools that count lines (the official utility) read
                 // the wrong one if it differs from a real cable.
                 const int64_t now = now_ms();
                 if (now - c->since_ms < TRACE_MS || now - c->last_rx_ms < TRACE_AFTER_TX_MS) {
-                    note(c, "to the client: " + describe(raw, n));
+                    note(c, "to the client: " + (m ? describe(out, m) : std::string("(held)")) +
+                                (c->echo.dropped != dropped ? " (without the input number the SVS puts before a Y/G value)" : ""));
                 }
-                if (!send_text(c, std::string((const char *)raw, n))) {
+                if (m && !send_text(c, std::string((const char *)out, m))) {
                     drop_client(c, "failed");
                     break;
                 }

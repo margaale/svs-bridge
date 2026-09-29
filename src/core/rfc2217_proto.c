@@ -259,6 +259,70 @@ size_t rfc2217_escape(const uint8_t *in, size_t len, uint8_t *out, size_t max, s
     return o;
 }
 
+// ---- Y<n> / G<n>: drop the echoed input number ----
+
+void rfc2217_echo_init(rfc2217_echo_t *e) {
+    memset(e, 0, sizeof(*e));
+    e->input = -1;
+}
+
+void rfc2217_echo_expect(rfc2217_echo_t *e, int input) {
+    e->input = input;
+    e->hold_len = 0;
+}
+
+bool rfc2217_echo_pending(const rfc2217_echo_t *e) {
+    return e->input >= 0;
+}
+
+// Is this line only the number `want` (spaces and line ends aside)?
+static bool line_is_number(const uint8_t *p, size_t n, int want) {
+    int v = -1;
+    for (size_t i = 0; i < n; i++) {
+        if (p[i] >= '0' && p[i] <= '9') {
+            v = (v < 0 ? 0 : v * 10) + (p[i] - '0');
+            if (v > 1000) return false;
+        } else if (p[i] != ' ' && p[i] != '\r' && p[i] != '\n') {
+            return false;
+        }
+    }
+    return v == want;
+}
+
+size_t rfc2217_echo_release(rfc2217_echo_t *e, uint8_t *out, size_t max) {
+    const size_t n = e->hold_len < max ? e->hold_len : max;
+    memcpy(out, e->hold, n);
+    e->hold_len = 0;
+    e->input = -1;
+    return n;
+}
+
+size_t rfc2217_echo_filter(rfc2217_echo_t *e, const uint8_t *in, size_t len, uint8_t *out, size_t max) {
+    size_t o = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (e->input < 0) {
+            if (o < max) out[o++] = in[i];
+            continue;
+        }
+        e->hold[e->hold_len++] = in[i];
+        if (in[i] == '\n') {
+            if (line_is_number(e->hold, e->hold_len, e->input)) {
+                e->dropped++;
+                e->hold_len = 0;
+                e->input = -1;
+            } else {  // another line (a status line, say) first: it goes on, the wait goes on
+                const size_t n = e->hold_len < max - o ? e->hold_len : max - o;
+                memcpy(out + o, e->hold, n);
+                o += n;
+                e->hold_len = 0;
+            }
+        } else if (e->hold_len == sizeof(e->hold)) {  // too long to be the number: not an echo
+            o += rfc2217_echo_release(e, out + o, max - o);
+        }
+    }
+    return o;
+}
+
 // ---- Readable description of Telnet/RFC 2217 bytes (traffic log) ----
 
 typedef struct {

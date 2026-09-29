@@ -159,6 +159,41 @@ static void test_describe() {
     CHECK(small.size() == 11 && small.substr(8) == "...");
 }
 
+static std::string echo_filter(rfc2217_echo_t &e, const std::string &in) {
+    uint8_t out[256];
+    const size_t n = rfc2217_echo_filter(&e, (const uint8_t *)in.data(), in.size(), out, sizeof(out));
+    return std::string((const char *)out, n);
+}
+
+static void test_echo_filter() {
+    rfc2217_echo_t e;
+    rfc2217_echo_init(&e);
+    // Nothing asked: everything passes
+    CHECK(echo_filter(e, "SVS TOTAL INPUTS=4\r\n1\r\n") == "SVS TOTAL INPUTS=4\r\n1\r\n");
+    // Y1 -> "1", "1": the first is the input number
+    rfc2217_echo_expect(&e, 1);
+    CHECK(echo_filter(e, "1\r\n1\r\n") == "1\r\n");
+    CHECK(!rfc2217_echo_pending(&e) && e.dropped == 1);
+    // Y4 -> "4", "0", with a status line first and the answer split anywhere
+    rfc2217_echo_expect(&e, 4);
+    std::string got;
+    for (char c : std::string("SVS TOTAL INPUTS=4\r\nSVS CURRENT INPUT=0\r\n4\r\n0\r\n")) got += echo_filter(e, std::string(1, c));
+    CHECK(got == "SVS TOTAL INPUTS=4\r\nSVS CURRENT INPUT=0\r\n0\r\n");
+    // Not the number asked about (a stale answer): passes, and the wait goes on
+    rfc2217_echo_expect(&e, 2);
+    CHECK(echo_filter(e, "7\r\n") == "7\r\n" && rfc2217_echo_pending(&e));
+    CHECK(echo_filter(e, "2\r\n1\r\n") == "1\r\n");
+    // The answer never comes whole: released as it is
+    rfc2217_echo_expect(&e, 3);
+    CHECK(echo_filter(e, "3") == "" && rfc2217_echo_pending(&e));
+    uint8_t out[64];
+    CHECK(rfc2217_echo_release(&e, out, sizeof(out)) == 1 && out[0] == '3' && !rfc2217_echo_pending(&e));
+    // A line too long to be a number is not held for ever
+    rfc2217_echo_expect(&e, 1);
+    const std::string junk(60, 'x');
+    CHECK(echo_filter(e, junk).size() >= 40 && !rfc2217_echo_pending(&e));
+}
+
 int main() {
     test_greeting();
     test_data_and_escape();
@@ -167,6 +202,7 @@ int main() {
     test_notify_and_signature();
     test_bad_input();
     test_describe();
+    test_echo_filter();
     if (g_failures) {
         std::printf("%d check(s) failed\n", g_failures);
         return 1;
