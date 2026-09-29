@@ -66,6 +66,13 @@ Utility for day-to-day settings:
   the IR codes the SVS sends the scaler (with the official utility's presets
   for the RetroTINK 4K, 5X and the OSSCs). **Read from the SVS**, change them,
   **Save to the SVS**. Moving an input takes its settings along, to be saved.
+- **Input controls**, under the active input: Previous and Next, Seek (the
+  previous or next input that has a signal), Go to an input, and Attract mode
+  on or off (its state cannot be read). The same commands as the official
+  utility's buttons; Previous, Next and Go need firmware 1.12, Seek and Attract
+  mode 1.14. A light under each input shows the one on screen (green), and one
+  under each transcoder (blue) that it is converting the input on screen, as
+  last read from the SVS.
 
 Reading and saving send commands, so the RetroTINK's HD-15 must be unplugged
 (see above): the page asks first. It needs SVS firmware 1.20 or newer.
