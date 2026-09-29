@@ -27,6 +27,8 @@
 //   POST /device/factory-reset    [admin] erase all settings, reboot into setup mode
 //   GET  /device/svs              [admin] SVS banner info and firmware update state
 //   GET  /device/svs/log?after=N  [admin] traffic with the SVS after entry N
+//   GET  /ws                      [admin] WebSocket: the SVS log and status pushed as they
+//                                 change, input commands taken (see web_server.cpp)
 //   POST /device/svs/restart      [admin] restart the SVS (it then reports its info)
 //   POST /device/svs/send         [admin] {"command"}: send a line to the SVS (web UI console)
 //   POST /device/svs/check        [admin] step 1: identify the SVS bootloader (restarts it)

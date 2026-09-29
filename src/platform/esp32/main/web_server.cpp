@@ -2,10 +2,14 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <atomic>
 #include <string>
 #include <memory>
+#include <new>
 #include <functional>
+#include <vector>
 
+#include "sdkconfig.h"
 #include "esp_http_server.h"
 #include "esp_https_server.h"
 #include "esp_http_client.h"
@@ -29,6 +33,11 @@
 #include "svs_usb.h"
 #include "tls_cert.h"
 #include "wifi_manager.h"
+
+// sdkconfig.defaults sets these, but a build directory configured before keeps its own sdkconfig
+#if !CONFIG_HTTPD_WS_SUPPORT || !CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT || CONFIG_LWIP_MAX_SOCKETS < 24
+#error "This sdkconfig predates the web UI's WebSocket: delete build/esp32/sdkconfig and build again"
+#endif
 
 namespace web_server {
 
@@ -90,13 +99,18 @@ static esp_err_t send_error(httpd_req_t *req, httpd_err_code_t code, const char 
     return httpd_resp_send_err(req, code, msg);
 }
 
+static const char *busy_message()
+{
+    return svs_settings::busy() ? "The SVS's settings are being read or saved"
+                                : "An SVS firmware update is in progress";
+}
+
 // Rebooting or updating the bridge now would interrupt the SVS update, or
 // talking to the SVS now would interleave with reading or saving its settings
 static esp_err_t send_busy(httpd_req_t *req)
 {
     JsonDocument doc;
-    doc["error"] = svs_settings::busy() ? "The SVS's settings are being read or saved"
-                                        : "An SVS firmware update is in progress";
+    doc["error"] = busy_message();
     httpd_resp_set_status(req, "409 Conflict");
     return send_json(req, doc);
 }
@@ -716,13 +730,13 @@ static const char *task_name(svs_flasher::Task task)
 //             "device": {"checked", "compatible", "summary", "problem", "app_space"},
 //             "image": {"staged", "source", "size", "sha256"},
 //             "can_flash", "blocker", "result", "result_ok", "result_of"}}
-static esp_err_t svs_get(httpd_req_t *req)
+// (also pushed over /ws)
+static void add_svs_state(JsonObject svs)
 {
-    JsonDocument doc;
-    add_svs_info(doc.to<JsonObject>());
+    add_svs_info(svs);
 
     svs_flasher::Status st = svs_flasher::status();
-    JsonObject update = doc["update"].to<JsonObject>();
+    JsonObject update = svs["update"].to<JsonObject>();
     update["task"] = task_name(st.task);
     update["phase"] = st.phase;
     update["progress"] = st.progress;
@@ -747,7 +761,32 @@ static esp_err_t svs_get(httpd_req_t *req)
     update["result"] = st.result;
     update["result_ok"] = st.result_ok;
     update["result_of"] = task_name(st.result_of);
+}
+
+static esp_err_t svs_get(httpd_req_t *req)
+{
+    JsonDocument doc;
+    add_svs_state(doc.to<JsonObject>());
     return send_json(req, doc);
+}
+
+static const size_t LOG_BATCH = 100;
+
+// Up to LOG_BATCH entries after `after` into doc (also pushed over /ws). Returns how many.
+static size_t add_log_entries(JsonDocument &doc, uint32_t after, uint32_t *last_seq)
+{
+    doc["now"] = esp_timer_get_time() / 1000;
+    JsonArray entries = doc["entries"].to<JsonArray>();
+    std::vector<svs_usb::LogEntry> list = svs_usb::log_since(after, LOG_BATCH);
+    for (const auto &e : list) {
+        JsonObject o = entries.add<JsonObject>();
+        o["seq"] = e.seq;
+        o["t"] = e.ms;
+        o["d"] = std::string(1, e.dir);
+        o["s"] = e.text;
+        *last_seq = e.seq;
+    }
+    return list.size();
 }
 
 // Traffic with the SVS since entry `after` (query string):
@@ -763,43 +802,56 @@ static esp_err_t svs_log_get(httpd_req_t *req)
     }
 
     JsonDocument doc;
-    doc["now"] = esp_timer_get_time() / 1000;
-    JsonArray entries = doc["entries"].to<JsonArray>();
-    for (const auto &e : svs_usb::log_since(after, 100)) {
-        JsonObject o = entries.add<JsonObject>();
-        o["seq"] = e.seq;
-        o["t"] = e.ms;
-        o["d"] = std::string(1, e.dir);
-        o["s"] = e.text;
-    }
+    add_log_entries(doc, after, &after);
     return send_json(req, doc);
 }
 
-// Body: {"command": "SVS_Input_Up"}; sent as typed, plus the configured line ending
+// A line for the SVS, sent as typed plus the configured line ending (also from
+// /ws). Returns 0 once sent, else the HTTP status to refuse it with and why.
+static int svs_send_command(const std::string &command, std::string &error)
+{
+    if (svs_settings::busy()) {
+        error = busy_message();
+        return 409;
+    }
+    if (command.empty() || command.size() > 128) {
+        error = "Enter a command (up to 128 characters)";
+        return 400;
+    }
+    esp_err_t err = svs_usb::send(command);
+    if (err == ESP_ERR_NOT_ALLOWED) {
+        error = busy_message();
+        return 409;
+    }
+    if (err == ESP_ERR_INVALID_STATE) {
+        error = "The SVS is not connected";
+        return 400;
+    }
+    if (err != ESP_OK) {
+        error = esp_err_to_name(err);
+        return 500;
+    }
+    return 0;
+}
+
+// Body: {"command": "SVS_Input_Up"}
 static esp_err_t svs_send_post(httpd_req_t *req)
 {
     JsonDocument body;
     if (!read_json_body(req, body)) {
         return ESP_OK;
     }
-    std::string command = body["command"] | "";
-    if (svs_settings::busy()) {
+    std::string error;
+    switch (svs_send_command(body["command"] | "", error)) {
+    case 0:
+        return send_ok(req);
+    case 409:
         return send_busy(req);
+    case 400:
+        return send_error(req, HTTPD_400_BAD_REQUEST, error.c_str());
+    default:
+        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, error.c_str());
     }
-    if (command.empty() || command.size() > 128) {
-        return send_error(req, HTTPD_400_BAD_REQUEST, "Enter a command (up to 128 characters)");
-    }
-    esp_err_t err = svs_usb::send(command);
-    if (err == ESP_ERR_NOT_ALLOWED) {
-        return send_busy(req);
-    }
-    if (err == ESP_ERR_INVALID_STATE) {
-        return send_error(req, HTTPD_400_BAD_REQUEST, "The SVS is not connected");
-    }
-    if (err != ESP_OK) {
-        return send_error(req, HTTPD_500_INTERNAL_SERVER_ERROR, esp_err_to_name(err));
-    }
-    return send_ok(req);
 }
 
 // Restarts the SVS so it reports its firmware version and inputs again
@@ -1301,6 +1353,248 @@ static esp_err_t logout_post(httpd_req_t *req)
 }
 
 // ---------------------------------------------------------------------------
+// Live updates (/ws)
+//
+// Each open web UI keeps a WebSocket: the bridge pushes the SVS's traffic log
+// and status as they change, and takes the input commands on it, with no
+// request (and no TLS handshake) per command. Without it the page polls.
+// Text frames, JSON:
+//   page:   {"type": "hello", "after": N}  ready: the log after entry N, and the status
+//           {"type": "send", "id": n, "command": "SVS_Input_Up"}  as POST /device/svs/send
+//           {"type": "ping"}  now and then; the answer shows the socket still works
+//   bridge: {"type": "svs", "svs": {as GET /device/svs}, "cfg": {"task", "seq", "blocker"}}
+//             whenever any of it changes (cfg changing: GET /device/svs/config again)
+//           {"type": "log", "now", "entries": [as GET /device/svs/log]}
+//           {"type": "reply", "id": n, "ok": true} or {"type": "reply", "id": n, "status", "error"}
+//           {"type": "pong"}
+//           {"type": "auth"}  the session ended (logout, expiry); the socket closes
+// The session cookie is checked before the handshake, then before each push.
+// ---------------------------------------------------------------------------
+
+static const int HTTPS_MAX_SOCKETS = 7;  // each open page holds one for its WebSocket
+static const size_t MAX_WS_FRAME = 512;
+static const int WS_TICK_MS = 500;  // for what changes without a log line (flash progress)
+
+struct WsClient {
+    std::string token;       // the session it was opened with
+    bool ready = false;      // "hello" received
+    uint32_t log_after = 0;  // the newest log entry it has
+    std::string svs;         // the "svs" message it has
+};
+
+static std::atomic<int> s_ws_clients{0};
+static std::atomic<bool> s_ws_flush_queued{false};
+static esp_timer_handle_t s_ws_timer = nullptr;
+
+static void ws_client_free(void *ctx)
+{
+    delete static_cast<WsClient *>(ctx);
+    s_ws_clients--;
+}
+
+static void ws_flush(void *arg);
+
+// From any task: have the server's task push what is new (one run pending at most)
+static void ws_notify()
+{
+    if (s_ws_clients.load() > 0 && !s_ws_flush_queued.exchange(true) &&
+        httpd_queue_work(s_https_server, ws_flush, nullptr) != ESP_OK) {
+        s_ws_flush_queued = false;
+    }
+}
+
+static void on_ws_tick(void *arg)
+{
+    ws_notify();
+}
+
+static std::string ws_svs_message()
+{
+    JsonDocument doc;
+    doc["type"] = "svs";
+    add_svs_state(doc["svs"].to<JsonObject>());
+    svs_settings::Status st = svs_settings::status();
+    JsonObject cfg = doc["cfg"].to<JsonObject>();
+    cfg["task"] = settings_task_name(st.task);
+    cfg["seq"] = st.snapshot.valid ? st.snapshot.seq : 0;
+    cfg["blocker"] = st.blocker;
+    std::string out;
+    serializeJson(doc, out);
+    return out;
+}
+
+static esp_err_t ws_send_text(int fd, const std::string &text)
+{
+    httpd_ws_frame_t frame = {};
+    frame.type = HTTPD_WS_TYPE_TEXT;
+    frame.payload = (uint8_t *)text.data();
+    frame.len = text.size();
+    return httpd_ws_send_frame_async(s_https_server, fd, &frame);
+}
+
+// In the server's task (httpd_queue_work): sends each page what it has not seen
+static void ws_flush(void *arg)
+{
+    s_ws_flush_queued = false;
+    int fds[HTTPS_MAX_SOCKETS];
+    size_t n = HTTPS_MAX_SOCKETS;
+    if (httpd_get_client_list(s_https_server, &n, fds) != ESP_OK) {
+        return;
+    }
+    std::string svs;  // built once, for the pages that need it
+    bool more = false;
+    for (size_t i = 0; i < n; i++) {
+        const int fd = fds[i];
+        if (httpd_ws_get_fd_info(s_https_server, fd) != HTTPD_WS_CLIENT_WEBSOCKET) {
+            continue;
+        }
+        auto *c = static_cast<WsClient *>(httpd_sess_get_ctx(s_https_server, fd));
+        if (c == nullptr || !c->ready) {
+            continue;
+        }
+        if (!auth::session_valid(c->token)) {
+            ws_send_text(fd, "{\"type\":\"auth\"}");
+            httpd_sess_trigger_close(s_https_server, fd);
+            continue;
+        }
+        if (svs.empty()) {
+            svs = ws_svs_message();
+        }
+        esp_err_t err = ESP_OK;
+        if (svs != c->svs) {
+            err = ws_send_text(fd, svs);
+            c->svs = svs;
+        }
+        if (err == ESP_OK && svs_usb::log_head() > c->log_after) {
+            JsonDocument doc;
+            doc["type"] = "log";
+            size_t count = add_log_entries(doc, c->log_after, &c->log_after);
+            std::string out;
+            serializeJson(doc, out);
+            err = ws_send_text(fd, out);
+            more |= count == LOG_BATCH;
+        }
+        if (err != ESP_OK) {
+            httpd_sess_trigger_close(s_https_server, fd);
+        } else {
+            httpd_sess_update_lru_counter(s_https_server, fd);  // in use: not the one to purge
+        }
+    }
+    if (more) {
+        ws_notify();
+    }
+}
+
+static esp_err_t ws_reply(httpd_req_t *req, const std::string &text)
+{
+    httpd_ws_frame_t frame = {};
+    frame.type = HTTPD_WS_TYPE_TEXT;
+    frame.payload = (uint8_t *)text.data();
+    frame.len = text.size();
+    return httpd_ws_send_frame(req, &frame);
+}
+
+// A message from a page
+static esp_err_t ws_handler(httpd_req_t *req)
+{
+    httpd_ws_frame_t frame = {};
+    if (httpd_ws_recv_frame(req, &frame, 0) != ESP_OK || frame.len > MAX_WS_FRAME) {  // its length
+        return ESP_FAIL;
+    }
+    std::string text(frame.len, '\0');
+    if (frame.len > 0) {
+        frame.payload = (uint8_t *)&text[0];
+        if (httpd_ws_recv_frame(req, &frame, frame.len) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
+    if (frame.type != HTTPD_WS_TYPE_TEXT) {
+        return ESP_OK;  // a pong
+    }
+    auto *c = static_cast<WsClient *>(req->sess_ctx);
+    if (c == nullptr) {
+        return ESP_FAIL;
+    }
+    if (!auth::session_valid(c->token)) {
+        ws_reply(req, "{\"type\":\"auth\"}");
+        return ESP_FAIL;
+    }
+    JsonDocument in;
+    if (deserializeJson(in, text) != DeserializationError::Ok) {
+        return ESP_OK;
+    }
+    std::string type = in["type"] | "";
+    if (type == "hello") {
+        c->log_after = in["after"].as<uint32_t>();
+        c->svs.clear();
+        c->ready = true;
+        ws_notify();
+        return ESP_OK;
+    }
+    if (type == "ping") {
+        return ws_reply(req, "{\"type\":\"pong\"}");
+    }
+    if (type == "send") {
+        JsonDocument out;
+        out["type"] = "reply";
+        out["id"] = in["id"];
+        std::string error;
+        int status = svs_send_command(in["command"] | "", error);
+        if (status == 0) {
+            out["ok"] = true;
+        } else {
+            out["status"] = status;
+            out["error"] = error;
+        }
+        std::string reply;
+        serializeJson(out, reply);
+        return ws_reply(req, reply);  // the command's line reaches the log by itself (ws_notify)
+    }
+    return ESP_OK;
+}
+
+// A browser sends Origin with every WebSocket handshake: only this bridge's own
+// page may open one with the session cookie (SameSite=Strict already keeps
+// other sites' pages from sending it)
+static bool same_origin(httpd_req_t *req)
+{
+    char origin[160];
+    char host[128];
+    esp_err_t err = httpd_req_get_hdr_value_str(req, "Origin", origin, sizeof(origin));
+    if (err == ESP_ERR_NOT_FOUND) {
+        return true;  // not a browser: the cookie is all it has
+    }
+    if (err != ESP_OK || httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) != ESP_OK) {
+        return false;
+    }
+    return std::string(origin) == std::string("https://") + host;
+}
+
+// Before the handshake: an admin session, from the bridge's page
+static esp_err_t ws_pre_handshake(httpd_req_t *req)
+{
+    if (!same_origin(req)) {
+        httpd_resp_send_err(req, HTTPD_403_FORBIDDEN, "Not this bridge's page");
+        return ESP_FAIL;
+    }
+    std::string token = session_token(req);
+    if (token.empty() || !auth::session_valid(token)) {
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Login required");
+        return ESP_FAIL;
+    }
+    auto *c = new (std::nothrow) WsClient();
+    if (c == nullptr) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_FAIL;
+    }
+    c->token = token;
+    s_ws_clients++;
+    req->sess_ctx = c;  // freed with the session
+    req->free_ctx = ws_client_free;
+    return ESP_OK;
+}
+
+// ---------------------------------------------------------------------------
 // Dispatch and fallbacks
 // ---------------------------------------------------------------------------
 
@@ -1413,6 +1707,17 @@ static void register_routes(httpd_handle_t server, const RouteEntry (&routes)[N]
     }
 }
 
+static void register_ws(httpd_handle_t server)
+{
+    httpd_uri_t uri = {};
+    uri.uri = "/ws";
+    uri.method = HTTP_GET;
+    uri.handler = ws_handler;
+    uri.is_websocket = true;  // the server answers pings and closes by itself
+    uri.ws_pre_handshake_cb = ws_pre_handshake;
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &uri));
+}
+
 static void start_https()
 {
     const std::string &cert = tls_cert::cert_pem();
@@ -1429,12 +1734,20 @@ static void start_https()
     config.servercert_len = cert.size() + 1;
     config.prvtkey_pem = (const uint8_t *)key.c_str();
     config.prvtkey_len = key.size() + 1;
-    config.httpd.max_uri_handlers = sizeof(HTTPS_ROUTES) / sizeof(HTTPS_ROUTES[0]);
+    config.httpd.max_uri_handlers = sizeof(HTTPS_ROUTES) / sizeof(HTTPS_ROUTES[0]) + 1;  // + /ws
     // Handlers that fetch SVS releases open their own TLS connection to GitHub
     config.httpd.stack_size = 16384;
+    config.httpd.max_open_sockets = HTTPS_MAX_SOCKETS;
+    // A page keeps its WebSocket open: TCP keepalive frees the slot of one whose
+    // computer went away without closing it (asleep, off the network)
+    config.httpd.keep_alive_enable = true;
+    config.httpd.keep_alive_idle = 10;
+    config.httpd.keep_alive_interval = 5;
+    config.httpd.keep_alive_count = 3;
 
     ESP_ERROR_CHECK(httpd_ssl_start(&s_https_server, &config));
     register_routes(s_https_server, HTTPS_ROUTES);
+    register_ws(s_https_server);
     ESP_ERROR_CHECK(httpd_register_err_handler(s_https_server, HTTPD_404_NOT_FOUND, https_not_found));
 }
 
@@ -1461,6 +1774,14 @@ void start()
 
     start_https();
     start_http();
+
+    // Pages on /ws hear of each new log line at once, and of the rest within a tick
+    svs_usb::set_log_listener(ws_notify);
+    esp_timer_create_args_t tick_args = {};
+    tick_args.callback = on_ws_tick;
+    tick_args.name = "ws";
+    ESP_ERROR_CHECK(esp_timer_create(&tick_args, &s_ws_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_ws_timer, WS_TICK_MS * 1000));
     ESP_LOGI(TAG, "Web servers started (HTTPS 443, HTTP 80)");
 }
 

@@ -570,7 +570,8 @@ function showAuth(view) {
   $('login').hidden = view !== 'login';
   if (view === 'login' && wasIn) $('login-pw').focus();
   route();
-  if (signedIn) { refresh(); loadLayout(); refreshSvs(); startLog(); loadApiToken(); }
+  if (signedIn) { refresh(); loadLayout(); refreshSvs(); startLog(); loadApiToken(); wsConnect(); }
+  else wsDrop();
 }
 
 let tab = 'svs';
@@ -754,10 +755,12 @@ function renderNav(s) {
 
 async function navSend(command) {
   try {
-    await post('/device/svs/send', {command});
+    await svsSend(command);
     setMsg($('nav-msg'), '');
-    pollLog();
-    setTimeout(pollLog, 350);  // the SVS answers within ~100 ms: show the new input without waiting for the timer
+    if (!wsLive) {  // the socket brings the answer by itself
+      pollLog();
+      setTimeout(pollLog, 350);  // the SVS answers within ~100 ms: show the new input without waiting for the timer
+    }
   } catch (err) {
     setMsg($('nav-msg'), err.message, 'bad');
   }
@@ -891,8 +894,8 @@ async function refreshSvs() {
   if (!signedIn) return;
   try { renderSvs(await api('/device/svs')); } catch (e) { /* busy */ }
   if (!cfgTimer) refreshCfg();
-  // Poll faster while checking or flashing
-  svsTimer = setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
+  // Poll faster while checking or flashing; not at all while the socket brings it
+  svsTimer = wsLive ? null : setTimeout(refreshSvs, svs && svs.update.task !== 'idle' ? 700 : 5000);
 }
 
 // --- SVS: the switch --------------------------------------------------------------
@@ -1331,7 +1334,8 @@ function renderCfgBar() {
   } else {
     const n = pendingTotal();
     title = n ? `${n} change${n === 1 ? '' : 's'} not on the SVS yet` : 'These settings match the SVS';
-    sub = `Read ${c.snapshot.age_s < 60 ? 'just now' : duration(c.snapshot.age_s) + ' ago'} · firmware ${c.snapshot.firmware.replace(/^SVS_FW_/, '')}`;
+    const age = c.snapshot.age_s + Math.floor((Date.now() - cfgAt) / 1000);  // fetched only when it changes
+    sub = `Read ${age < 60 ? 'just now' : duration(age) + ' ago'} · firmware ${c.snapshot.firmware.replace(/^SVS_FW_/, '')}`;
     read = true; readLabel = 'Read again'; write = n > 0;
   }
   bar.classList.toggle('warn', !idle);
@@ -1408,11 +1412,12 @@ function moveItem(group, from, to) {
 // --- Settings (stored in the SVS)
 
 let cfgTimer = null;
+let cfgAt = 0;
 async function refreshCfg() {
   clearTimeout(cfgTimer);
   cfgTimer = null;
   if (!signedIn) return;
-  try { cfg = await api('/device/svs/config'); } catch (e) { /* busy */ }
+  try { cfg = await api('/device/svs/config'); cfgAt = Date.now(); } catch (e) { /* busy */ }
   const running = cfg && cfg.task !== 'idle';
   if (!running && cfgOp) {
     cfgOp = false;
@@ -1687,31 +1692,42 @@ function logTime(uptimeMs, nowMs) {
   return d.toLocaleTimeString([], {hour12: false}) + '.' + String(d.getMilliseconds()).padStart(3, '0');
 }
 
+// Adds the entries of a GET /device/svs/log (or of a "log" pushed over the socket) to the box.
+// Returns the newest input the SVS reported in them, or null.
+function showLog(r) {
+  const box = $('svs-log');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
+  if (r.entries.length) {
+    const empty = box.querySelector('.empty');
+    if (empty) empty.remove();
+  }
+  let inputNow = null;
+  for (const e of r.entries) {
+    const m = e.d === '<' && /^SVS (?:NEW|CURRENT) INPUT\D*(\d+)/.exec(e.s);
+    if (m) inputNow = +m[1];
+    // Two polls can overlap (Send starts one while the timer's is in flight), or a poll and the socket:
+    // draw each entry once
+    if (e.seq <= logAfter) continue;
+    const line = document.createElement('div');
+    line.className = e.d === '>' ? 'tx' : e.d === '*' ? 'ev' : 'rx';
+    const arrow = e.d === '>' ? '→' : e.d === '*' ? '•' : '←';
+    line.innerHTML = `<span class="t">${logTime(e.t, r.now)}</span> ${arrow} ${esc(e.s)}`;
+    box.appendChild(line);
+    logAfter = e.seq;
+  }
+  while (box.childElementCount > 500) box.firstElementChild.remove();
+  if (atBottom || box.offsetParent === null) box.scrollTop = box.scrollHeight;
+  return inputNow;
+}
+
+// Without the socket
 async function pollLog() {
   clearTimeout(logTimer);
   if (!signedIn) return;
   let batchFull = false;
   try {
     const r = await api(`/device/svs/log?after=${logAfter}`);
-    const box = $('svs-log');
-    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 24;
-    if (r.entries.length) {
-      const empty = box.querySelector('.empty');
-      if (empty) empty.remove();
-    }
-    let inputNow = null;  // the newest input the SVS reported in these entries
-    for (const e of r.entries) {
-      const m = e.d === '<' && /^SVS (?:NEW|CURRENT) INPUT\D*(\d+)/.exec(e.s);
-      if (m) inputNow = +m[1];
-      // Two polls can overlap (Send starts one while the timer's is in flight): draw each entry once
-      if (e.seq <= logAfter) continue;
-      const line = document.createElement('div');
-      line.className = e.d === '>' ? 'tx' : e.d === '*' ? 'ev' : 'rx';
-      const arrow = e.d === '>' ? '→' : e.d === '*' ? '•' : '←';
-      line.innerHTML = `<span class="t">${logTime(e.t, r.now)}</span> ${arrow} ${esc(e.s)}`;
-      box.appendChild(line);
-      logAfter = e.seq;
-    }
+    const inputNow = showLog(r);
     // The status is polled every 5 s; the log every second and after each command: an input change seen
     // here is shown at once (the name of the input comes from the layout, the rest with the next status)
     if (inputNow !== null && svs && svs.connected && svs.current_input !== inputNow) {
@@ -1719,13 +1735,11 @@ async function pollLog() {
       svs.current_input = inputNow;
       svs.current_input_name = li && li.name || '';
       renderSvs(svs);
-      refreshSvsNow();
+      if (!wsLive) refreshSvsNow();
     }
-    while (box.childElementCount > 500) box.firstElementChild.remove();
-    if (atBottom || box.offsetParent === null) box.scrollTop = box.scrollHeight;
     batchFull = r.entries.length >= 100;  // more waiting: fetch again right away
   } catch (e) { /* busy, restarting or logged out */ }
-  logTimer = setTimeout(pollLog, batchFull ? 0 : 1000);
+  logTimer = wsLive ? null : setTimeout(pollLog, batchFull ? 0 : 1000);
 }
 
 function clearLog() {
@@ -1741,15 +1755,108 @@ function startLog() {
 
 $('svs-log-clear').onclick = clearLog;
 
+// --- Live updates -------------------------------------------------------------
+//
+// One WebSocket (/ws, see web_server.cpp) brings what changes on the SVS's side as it happens: the log
+// and the status, pushed by the bridge; the input commands go out on it too, with no request to set up
+// for each. Until it is up, or when it drops, the page polls as before and tries it again, less often
+// each time.
+
+let ws = null;          // open or opening
+let wsLive = false;     // it answered the hello: the log and the status come from it
+let wsRetry = 0, wsTimer = null, wsHeard = 0, wsPinged = 0, wsCfg = '', wsId = 0;
+const wsReplies = new Map();  // command id -> {resolve, reject, timer}
+
+function wsConnect() {
+  clearTimeout(wsTimer);
+  if (!signedIn || ws || !window.WebSocket) return;
+  wsCfg = '';
+  const s = ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  s.onopen = () => {
+    wsHeard = Date.now();
+    s.send(JSON.stringify({type: 'hello', after: logAfter}));
+  };
+  s.onmessage = (e) => {
+    wsHeard = Date.now();
+    let m;
+    try { m = JSON.parse(e.data); } catch (err) { return; }
+    if (!wsLive) {
+      wsLive = true;
+      wsRetry = 0;
+      clearTimeout(logTimer); clearTimeout(svsTimer);
+    }
+    if (m.type === 'svs') {
+      renderSvs(m.svs);
+      // The settings: fetched again when their task, last read or blocker changes
+      const c = JSON.stringify(m.cfg);
+      if (c !== wsCfg) { wsCfg = c; if (!cfgTimer) refreshCfg(); }
+    } else if (m.type === 'log') {
+      showLog(m);
+    } else if (m.type === 'reply') {
+      const w = wsReplies.get(m.id);
+      if (!w) return;
+      wsReplies.delete(m.id);
+      clearTimeout(w.timer);
+      if (m.ok) { w.resolve(m); return; }
+      const err = new Error(m.error);
+      err.status = m.status;
+      w.reject(err);
+    } else if (m.type === 'auth') {
+      showAuth('login');
+    }
+  };
+  s.onclose = () => wsDrop();
+}
+
+// Closed, gone quiet, or signed out: back to polling (if it was up) and try again later
+function wsDrop() {
+  const s = ws, was = wsLive;
+  clearTimeout(wsTimer);
+  ws = null;
+  wsLive = false;
+  if (s) {
+    s.onopen = s.onmessage = s.onclose = null;
+    try { s.close(); } catch (e) { /* already closed */ }
+  }
+  for (const w of wsReplies.values()) { clearTimeout(w.timer); w.reject(new Error('Lost the connection to the bridge')); }
+  wsReplies.clear();
+  if (!signedIn) { wsRetry = 0; return; }
+  if (was) { pollLog(); refreshSvs(); }
+  wsTimer = setTimeout(wsConnect, Math.min(30000, 1000 * 2 ** wsRetry++));
+}
+
+// Every 15 s a ping: the bridge answers at once, so no answer by the next one means the connection is gone
+// (a computer that slept, a Wi-Fi that changed) even if the browser has not noticed
+setInterval(() => {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (wsPinged > wsHeard && Date.now() - wsPinged > 10000) { wsDrop(); return; }
+  wsPinged = Date.now();
+  ws.send('{"type":"ping"}');
+}, 15000);
+
+// A command for the SVS, as POST /device/svs/send would
+function svsSend(command) {
+  if (!wsLive) return post('/device/svs/send', {command});
+  return new Promise((resolve, reject) => {
+    const id = ++wsId;
+    const timer = setTimeout(() => {
+      wsReplies.delete(id);
+      reject(new Error('The bridge did not answer'));
+    }, 5000);
+    wsReplies.set(id, {resolve, reject, timer});
+    ws.send(JSON.stringify({type: 'send', id, command}));
+  });
+}
+
 $('svs-send-form').onsubmit = async (e) => {
   e.preventDefault();
   const command = $('svs-cmd').value.trim();
   if (!command) return;
   try {
-    await post('/device/svs/send', {command});
+    await svsSend(command);
     setMsg($('svs-send-msg'), '');
     $('svs-cmd').select();  // easy to send again or replace
-    pollLog();
+    if (!wsLive) pollLog();
   } catch (err) {
     setMsg($('svs-send-msg'), err.message, 'bad');
   }
@@ -2314,7 +2421,7 @@ try {
     showAuth('login');
   }
 })();
-setInterval(() => { if (signedIn) refresh(); }, 5000);
+setInterval(() => { if (signedIn) { refresh(); renderCfgBar(); } }, 5000);  // the bar: how long ago the settings were read
 </script>
 </body>
 </html>
