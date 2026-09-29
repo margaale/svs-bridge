@@ -648,6 +648,30 @@ esp_err_t query(const std::string &cmd, std::string &answer, uint32_t timeout_ms
     return err;
 }
 
+esp_err_t query_last(const std::string &cmd, std::string &answer, uint32_t timeout_ms, uint32_t settle_ms)
+{
+    if (!s_session) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    xSemaphoreTake(s_query_mutex, portMAX_DELAY);
+    xQueueReset(s_answers);  // a late answer to an earlier command
+    esp_err_t err = do_send(cmd, false);
+    if (err == ESP_OK) {
+        Answer a;
+        if (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(timeout_ms)) == pdTRUE) {
+            answer = a.text;
+            // The rest of the answer follows within a few ms; the last line is the one kept
+            while (xQueueReceive(s_answers, &a, pdMS_TO_TICKS(settle_ms)) == pdTRUE) {
+                answer = a.text;
+            }
+        } else {
+            err = ESP_ERR_TIMEOUT;
+        }
+    }
+    xSemaphoreGive(s_query_mutex);
+    return err;
+}
+
 esp_err_t query_all(const std::string &cmd, std::vector<std::string> &lines, uint32_t window_ms)
 {
     // Only inside a session, which svs_settings starts after its own checks

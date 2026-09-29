@@ -73,6 +73,15 @@ static void test_reply()
     CHECK(parse_byte_reply("SVS CURRENT INPUT=3") == -1);
     CHECK(parse_byte_reply("") == -1);
     CHECK(parse_byte_reply("1234") == -1);
+
+    // Y<n>/G<n>: the input number, then the value (from a real SVS: only input 4 had it on)
+    CHECK(transcoder_value({"1", "1"}) == 1);
+    CHECK(transcoder_value({"4", "0"}) == 0);
+    CHECK(transcoder_value({"4\r", " 0\r"}) == 0);
+    CHECK(transcoder_value({"3"}) == 3);  // a single line is taken as the value
+    CHECK(transcoder_value({"SVS CURRENT INPUT=0", "2", "1"}) == 1);
+    CHECK(transcoder_value({"br_9600"}) == -1);
+    CHECK(transcoder_value({}) == -1);
 }
 
 // An 8-input SVS: V3 SCART on input 3, V3 VGA on 6, RGB -> YPbPr fitted
