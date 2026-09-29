@@ -238,7 +238,9 @@ idf.py -C src/platform/esp32 -B build/esp32 -p COMx flash monitor
 ```
 
 The build goes to `build/esp32`, with `svs_bridge-factory.bin` to flash a new
-board at 0x0. Options live under
+board at 0x0. Its `sdkconfig` is made from `sdkconfig.defaults` once and then
+kept: after a change to the defaults, delete `build/esp32/sdkconfig` (the build
+stops with that advice where it matters). Options live under
 `idf.py -C src/platform/esp32 -B build/esp32 menuconfig` → **SVS Bridge** (serial
 settings, hostname, setup network password).
 

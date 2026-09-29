@@ -7,14 +7,17 @@ without hardware:
     http://localhost:8080/portal   portal.html (the setup portal, over HTTP)
 
 The mock admin password is "password" (setting a new one in the setup flow
-replaces it). A simulated SVS flash takes a few seconds.
+replaces it). A simulated SVS flash takes a few seconds. /ws is the live
+channel (a WebSocket, see web_server.cpp), checked for changes every 50 ms.
 
 Run with any Python 3:  python scripts/dev_server.py [port]
 """
 
+import base64
 import hashlib
 import json
 import secrets
+import struct
 import sys
 import threading
 import time
@@ -254,6 +257,29 @@ def start(task, fn):
     threading.Thread(target=fn, daemon=True).start()
 
 
+def svs_send(command):
+    """A line for the SVS (POST /device/svs/send, or "send" on /ws). Returns the error, or None."""
+    command = command.strip()
+    if not command:
+        return "Enter a command (up to 128 characters)"
+    log(">", command)
+    n, total = state["svs"]["current_input"], state["svs"]["total_inputs"]
+    new = {"SVS_Input_Up": n % total + 1, "SVS_Input_Seek_Up": n % total + 1,
+           "SVS_Input_Down": (n - 2) % total + 1, "SVS_Input_Seek_Down": (n - 2) % total + 1}.get(command)
+    if command.startswith("SVS_Change_Input_") and command[17:].isdigit():
+        new = int(command[17:])
+    if new is not None:
+        def answer():
+            time.sleep(0.1)  # the real SVS answers within ~100 ms
+            state["svs"]["current_input"] = new
+            log("<", f"SVS NEW INPUT {new}")
+        threading.Thread(target=answer, daemon=True).start()
+    return None
+
+
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
 class Handler(BaseHTTPRequestHandler):
     def send_body(self, code, body, ctype, cookie=None):
         data = body.encode() if isinstance(body, str) else body
@@ -272,12 +298,15 @@ class Handler(BaseHTTPRequestHandler):
     def read_body(self):
         return self.rfile.read(int(self.headers.get("Content-Length", 0)))
 
-    def logged_in(self):
+    def session(self):
         for part in self.headers.get("Cookie", "").split(";"):
             name, _, value = part.strip().partition("=")
             if name == "svs_session" and value in auth["sessions"]:
-                return True
-        return False
+                return value
+        return None
+
+    def logged_in(self):
+        return self.session() is not None
 
     def new_session(self):
         token = secrets.token_hex(32)
@@ -312,9 +341,95 @@ class Handler(BaseHTTPRequestHandler):
         return {"selected": sel, "last": last,
                 "found": [{**c, "selected": c["id"] == sel} for c in CRULLERS]}
 
+    def live(self):
+        """GET /ws: the web UI's live channel (see web_server.cpp)."""
+        token = self.session()
+        if not token:
+            self.send_json({"error": "Login required"}, 401)
+            return
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode()).digest()).decode()
+        self.protocol_version = "HTTP/1.1"  # a browser takes no 101 from HTTP/1.0
+        self.send_response(101)
+        self.send_header("Upgrade", "websocket")
+        self.send_header("Connection", "Upgrade")
+        self.send_header("Sec-WebSocket-Accept", accept)
+        self.end_headers()
+        self.wfile.flush()
+        self.close_connection = True
+        lock = threading.Lock()
+        page = {"after": None, "svs": None, "open": True}  # after: None until its hello
+
+        def send(obj, op=0x1):
+            data = json.dumps(obj).encode() if isinstance(obj, dict) else obj
+            n = len(data)
+            head = bytes([0x80 | op]) + (bytes([n]) if n < 126 else struct.pack("!BH", 126, n)
+                                          if n < 65536 else struct.pack("!BQ", 127, n))
+            with lock:
+                self.wfile.write(head + data)
+                self.wfile.flush()
+
+        def push():
+            try:
+                while page["open"]:
+                    if token not in auth["sessions"]:  # logged out
+                        send({"type": "auth"})
+                        page["open"] = False
+                        self.connection.shutdown(2)
+                    elif page["after"] is not None:
+                        msg = json.dumps({"type": "svs", "svs": self.svs_json(),
+                                          "cfg": {"task": settings["task"], "blocker": settings_json()["blocker"],
+                                                  "seq": settings["snapshot"]["seq"] if settings["snapshot"] else 0}})
+                        if msg != page["svs"]:
+                            page["svs"] = msg
+                            send(msg.encode())
+                        entries = [e for e in svs_log if e["seq"] > page["after"]][:100]
+                        if entries:
+                            page["after"] = entries[-1]["seq"]
+                            send({"type": "log", "now": uptime_ms(), "entries": entries})
+                    time.sleep(0.05)
+            except OSError:
+                page["open"] = False
+
+        threading.Thread(target=push, daemon=True).start()
+        try:
+            while True:
+                head = self.rfile.read(2)
+                if len(head) < 2:
+                    break
+                op, n = head[0] & 0x0F, head[1] & 0x7F
+                if n == 126:
+                    n = struct.unpack("!H", self.rfile.read(2))[0]
+                elif n == 127:
+                    n = struct.unpack("!Q", self.rfile.read(8))[0]
+                mask = self.rfile.read(4) if head[1] & 0x80 else bytes(4)
+                data = bytes(b ^ mask[i % 4] for i, b in enumerate(self.rfile.read(n)))
+                if op == 0x8:  # close
+                    send(b"", 0x8)
+                    break
+                if op == 0x9:  # ping
+                    send(data, 0xA)
+                    continue
+                if op != 0x1:
+                    continue
+                m = json.loads(data or b"{}")
+                if m.get("type") == "hello":
+                    page.update(after=int(m.get("after", 0)), svs=None)
+                elif m.get("type") == "ping":
+                    send({"type": "pong"})
+                elif m.get("type") == "send":
+                    error = svs_send(m.get("command", ""))
+                    send({"type": "reply", "id": m.get("id"), "ok": True} if not error else
+                         {"type": "reply", "id": m.get("id"), "status": 400, "error": error})
+        except OSError:
+            pass
+        page["open"] = False
+
     def do_GET(self):
         path = self.path.partition("?")[0]
-        if path in PAGES:
+        if path == "/ws":
+            self.live()
+        elif path in PAGES:
             html = (WEB / PAGES[path]).read_text(encoding="utf-8")
             self.send_body(200, html, "text/html; charset=utf-8")
         elif path == "/api/status":
@@ -450,20 +565,11 @@ class Handler(BaseHTTPRequestHandler):
             layout.update(inputs=new.get("inputs", []), outputs=new.get("outputs", []))
             self.send_json(layout)
         elif path == "/device/svs/send":
-            command = json.loads(body or b"{}").get("command", "").strip()
-            if not command:
-                self.send_json({"error": "Enter a command (up to 128 characters)"}, 400)
-                return
-            log(">", command)
-            n, total = state["svs"]["current_input"], state["svs"]["total_inputs"]
-            new = {"SVS_Input_Up": n % total + 1, "SVS_Input_Seek_Up": n % total + 1,
-                   "SVS_Input_Down": (n - 2) % total + 1, "SVS_Input_Seek_Down": (n - 2) % total + 1}.get(command)
-            if command.startswith("SVS_Change_Input_") and command[17:].isdigit():
-                new = int(command[17:])
-            if new is not None:
-                state["svs"]["current_input"] = new
-                log("<", f"SVS NEW INPUT {new}")
-            self.send_json({"ok": True})
+            error = svs_send(json.loads(body or b"{}").get("command", ""))
+            if error:
+                self.send_json({"error": error}, 400)
+            else:
+                self.send_json({"ok": True})
         elif path == "/device/svs/restart":
             log("*", "SVS restarted")
             for line in (state["svs"]["firmware"], "SVS CURRENT INPUT 1", "SVS TOTAL INPUTS 8"):

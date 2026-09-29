@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <atomic>
 #include <deque>
 
 #include "freertos/FreeRTOS.h"
@@ -97,6 +98,7 @@ static const size_t LOG_CAPACITY = 300;
 static SemaphoreHandle_t s_log_mutex = nullptr;
 static std::deque<LogEntry> s_log;
 static uint32_t s_log_seq = 0;
+static std::atomic<void (*)()> s_log_listener{nullptr};
 
 static void log_add(char dir, const std::string &text)
 {
@@ -109,6 +111,15 @@ static void log_add(char dir, const std::string &text)
         s_log.pop_front();
     }
     xSemaphoreGive(s_log_mutex);
+    void (*listener)() = s_log_listener.load();
+    if (listener != nullptr) {
+        listener();
+    }
+}
+
+void set_log_listener(void (*fn)())
+{
+    s_log_listener = fn;
 }
 
 void log_note(const std::string &text)

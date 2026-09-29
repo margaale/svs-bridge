@@ -105,6 +105,10 @@ size_t rx_since(uint32_t &pos, uint8_t *buf, size_t max);
 // Adds a link event ('*') to the log, e.g. from the firmware updater
 void log_note(const std::string &text);
 
+// Called after each new log entry, from whichever task added it (the SVS's own
+// lines come after info() has taken them in). It must return at once. One only.
+void set_log_listener(void (*fn)());
+
 // --- Exclusive raw access, for flashing the SVS firmware --------------------
 //
 // While held, send() is refused and received bytes go to raw_read() instead of
