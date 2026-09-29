@@ -19,6 +19,7 @@
 #define MAX_CLIENTS           3
 #define TICK_MS               20
 #define TRACE_MS              60000 // how long after connecting what the SVS says is also noted in the log
+#define TRACE_AFTER_TX_MS     3000  // ... and how long after a client sends something
 #define RESTART_MIN_GAP_MS    4000  // a client that reopens its port in a loop can't keep the SVS restarting
 #define CLIENT_LINE_MAX       128
 #define KEEPALIVE_IDLE_S      30  // TCP keepalive (see add_client)
@@ -302,9 +303,13 @@ static void rfc2217_task(void *param) {
             // What the SVS says, byte for byte.
             uint8_t raw[128];
             for (size_t n; (n = svs_usb::rx_since(c->rx_pos, raw, sizeof(raw))) > 0;) {
-                // The first minute of a connection shows what the client is given: tools that count
-                // lines (the official utility) read the wrong one if it differs from a real cable.
-                if (now_ms() - c->since_ms < TRACE_MS) note(c, "to the client: " + describe(raw, n));
+                // What the client is given is noted for the first minute of a connection and for a few
+                // seconds after it sends something: tools that count lines (the official utility) read
+                // the wrong one if it differs from a real cable.
+                const int64_t now = now_ms();
+                if (now - c->since_ms < TRACE_MS || now - c->last_rx_ms < TRACE_AFTER_TX_MS) {
+                    note(c, "to the client: " + describe(raw, n));
+                }
                 if (!send_text(c, std::string((const char *)raw, n))) {
                     drop_client(c, "failed");
                     break;
