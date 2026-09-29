@@ -7,7 +7,7 @@
 # A line "+semver: minor" or "+semver: major" in a commit message bumps more; only at the start of a
 # line, so a message that merely mentions them doesn't.
 workflow: GitFlow/v1
-next-version: 0.1.0
+next-version: 0.2.0
 tag-prefix: '[vV]?'
 major-version-bump-message: '(?m)^\s*\+semver:\s?(breaking|major)\b'
 minor-version-bump-message: '(?m)^\s*\+semver:\s?(feature|minor)\b'
