@@ -269,8 +269,8 @@ what is released. Versions come from GitVersion (`GitVersion.yml`), and CI
 - **`develop`:** every push is a pre-release, `vX.Y.Z-alpha.N`, to try on a
   board. N is CI's run number, which grows with every build on every branch: a
   newer build is always a newer version, and a release sorts after its
-  pre-releases. The Bridge tab lists alphas but suggests them only to a bridge
-  already running one.
+  pre-releases. The Bridge tab lists alphas only to a bridge already running
+  one; a bridge on a release sees only releases.
 - **Pull requests** (into `develop`): built as `X.Y.Z-pr.N`, not published; the
   images are on the run, one file each.
 

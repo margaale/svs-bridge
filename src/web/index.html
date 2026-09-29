@@ -253,6 +253,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 <button id="svs-file-btn">Or a .hex file…</button>
 <input type="file" id="svs-file" accept=".hex" hidden>
 </div>
+<label class="switch"><input type="checkbox" id="svs-beta"><span>Beta firmware</span></label>
 <div class="msg" id="svs-msg"></div>
 <div class="kv" id="svs-staged" hidden><span>Firmware</span><span id="svs-src"></span><span>Size</span><span id="svs-size"></span><span>SHA-256</span><span id="svs-sha" class="small"></span></div>
 <div class="row" style="flex-wrap:wrap"><button class="primary danger" id="svs-flash-btn" disabled>Update SVS</button>
@@ -409,6 +410,9 @@ let status = null;
 let svs = null;
 let svsStaging = false;  // a chosen SVS firmware is being downloaded / checked
 let svsUpdating = false;  // Update SVS is checking the bootloader, before the flash starts
+// The SVS menu lists only the official releases; with Beta firmware on, the betas too. Until the switch is
+// touched, it is on when the SVS runs a beta (as the Bridge tab lists alphas only to a bridge on one)
+let svsBetaSet = false;
 
 // Eye button inside every password field to show / hide what was typed
 const EYE = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" ' +
@@ -788,7 +792,8 @@ function renderSvs(s) {
 
   // The firmware to write: chosen first, checked by the bridge (see stageSvsFirmware)
   const img = u.image;
-  $('svs-rel').disabled = $('svs-file-btn').disabled = busyTask || svsStaging || svsUpdating;
+  $('svs-rel').disabled = $('svs-file-btn').disabled = $('svs-beta').disabled = busyTask || svsStaging || svsUpdating;
+  if (!svsBetaSet) $('svs-beta').checked = /beta/i.test(s.firmware || '');
   $('svs-staged').hidden = !img.staged || svsStaging;
   text('svs-src', img.source);
   text('svs-size', img.size.toLocaleString() + (d.checked ? ' of ' + d.app_space.toLocaleString() : '') + ' bytes');
@@ -1839,24 +1844,32 @@ $('svs-probe-btn').onclick = async () => {
 // The official releases are checked when the menu is opened (the bridge caches
 // them for a minute, as GitHub limits how often it may be asked)
 let svsReleasesAt = 0;
+let svsReleases = null;
+
+function svsRenderReleases(chosen) {
+  const sel = $('svs-rel');
+  const beta = $('svs-beta').checked;
+  const list = svsReleases.filter((r) => beta || !r.beta);
+  sel.innerHTML = `<option value="">${beta ? 'Releases and betas…' : 'Official releases…'}</option>`;
+  const latest = list.find((r) => !r.beta);
+  for (const r of list) {
+    const opt = document.createElement('option');
+    opt.value = r.name;
+    opt.textContent = r.version + (r === latest ? ' (latest)' : '') + (r.beta ? ' · beta' : '');
+    sel.appendChild(opt);
+  }
+  if (!list.length) sel.innerHTML = '<option value="">No releases found</option>';
+  sel.value = list.some((r) => r.name === chosen) ? chosen : '';
+}
 
 async function svsLoadReleases() {
   const sel = $('svs-rel');
   const chosen = sel.value;
   sel.innerHTML = '<option value="">Checking releases…</option>';
   try {
-    const releases = await api('/device/svs/releases');
+    svsReleases = await api('/device/svs/releases');
     svsReleasesAt = Date.now();
-    sel.innerHTML = '<option value="">Official releases…</option>';
-    const latest = releases.find((r) => !r.beta);
-    for (const r of releases) {
-      const opt = document.createElement('option');
-      opt.value = r.name;
-      opt.textContent = r.version + (r === latest ? ' (latest)' : '') + (r.beta ? ' · beta' : '');
-      sel.appendChild(opt);
-    }
-    if (!releases.length) sel.innerHTML = '<option value="">No releases found</option>';
-    sel.value = releases.some((r) => r.name === chosen) ? chosen : '';
+    svsRenderReleases(chosen);
   } catch (e) {
     sel.innerHTML = '<option value="">Could not check releases</option>';
     if (e.status !== 401) setMsg($('svs-msg'), 'Could not check the official releases: ' + e.message, 'bad');
@@ -1874,6 +1887,10 @@ $('svs-rel').addEventListener('mousedown', async (e) => {
 });
 // Keyboard: refresh when the menu gets focus
 $('svs-rel').addEventListener('focus', () => { if (svsReleasesStale()) svsLoadReleases(); });
+$('svs-beta').onchange = () => {
+  svsBetaSet = true;
+  if (svsReleases) svsRenderReleases($('svs-rel').value);
+};
 
 // Stages a firmware on the bridge. The details and Flash SVS only show up once
 // the bridge has checked it; on failure nothing stays staged.
@@ -2297,8 +2314,10 @@ async function fwLoadReleases(force) {
   try {
     const data = await api('/device/releases');
     sel.innerHTML = '';
-    const list = data.releases || [];
     const running = data.running;
+    // Alphas (develop builds) are listed only to a bridge already running one: a release (master) sees releases.
+    const onAlpha = running.includes('-');
+    const list = (data.releases || []).filter((r) => onAlpha || !r.prerelease);
     for (const r of list) {
       const o = document.createElement('option');
       const c = cmpVersion(r.tag.replace(/^v/, ''), running);
@@ -2308,9 +2327,7 @@ async function fwLoadReleases(force) {
       sel.appendChild(o);
     }
     if (!list.length) sel.innerHTML = '<option value="">No releases found</option>';
-    // Alphas (develop builds) are suggested only to a bridge already running one; any can be picked.
-    const onAlpha = running.includes('-');
-    const newer = list.find((r) => (onAlpha || !r.prerelease) && cmpVersion(r.tag.replace(/^v/, ''), running) > 0);
+    const newer = list.find((r) => cmpVersion(r.tag.replace(/^v/, ''), running) > 0);
     if (newer) sel.value = newer.tag;
     else if (list.some((r) => r.tag.replace(/^v/, '') === running)) sel.value = list.find((r) => r.tag.replace(/^v/, '') === running).tag;
     text('fw-state', !list.length ? 'No releases yet' : newer ? newer.tag.replace(/^v/, '') + ' available' : 'Up to date (' + running + ')');
