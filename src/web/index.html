@@ -1214,7 +1214,7 @@ function renderInspector() {
     const v3 = snap ? snap.v3.map((v, i) => v.scart ? (i + 1) + ' SCART' : v.vga ? (i + 1) + ' VGA' : null).filter(Boolean).join(', ') || 'none' : '–';
     const txs = snap ? TX.filter((t) => snap.transcoders[t.fit]).map((t) => t.name).join(', ') || 'none' : '–';
     html = `<div class="insp-face">${face('control', 'ctl', {tag: 'CTRL'})}<span class="small">The microSD slot is on the edge by the pins.</span></div>` +
-      `<div class="insp-body"><h3>Control module</h3><div class="kv" style="max-width:460px">` +
+      `<div class="insp-body"><h3>Control module</h3><div class="kv">` +
       `<span>Firmware</span><span>${esc(svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, '') : '–')}</span>` +
       `<span>Input modules</span><span>${svs && svs.total_inputs != null ? svs.total_inputs : '–'}</span>` +
       `<span>V3 modules</span><span>${esc(v3)}</span><span>Transcoders</span><span>${esc(txs)}</span></div>` +
