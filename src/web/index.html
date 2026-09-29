@@ -130,6 +130,7 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 .mod .mn.none{color:#6B6F76}
 .mod .led{width:9px;height:9px;border-radius:50%;background:#33363B;box-shadow:inset 0 0 0 1px #0007;flex:none}
 .mod .led.g.on{background:var(--ok);box-shadow:0 0 8px 1px var(--ok)}
+.mod .led.ph{visibility:hidden}  /* no light on this module: keeps the room, so the tiles line up */
 .mod .led.b.on{background:var(--blue);box-shadow:0 0 8px 1px var(--blue)}
 .mod .led.r.on{background:#E0453F;box-shadow:0 0 8px 1px #E0453F}
 .mod.pend .mk,.mod.pend .mn{font-style:italic}  /* changes not saved to the SVS yet */
@@ -1141,7 +1142,8 @@ function modTile(o) {
     `${o.sel ? ' aria-pressed="true"' : ''}>` +
     o.svg + `<span class="mk" style="color:${o.color || ''}">${esc(o.kind)}${o.dot ? '<span class="vdot" title="Recognised by the SVS"></span>' : ''}</span>` +
     `<span class="mn${o.name ? '' : ' none'}">${esc(o.name || o.empty || '')}</span>` +
-    (o.led ? `<span class="led ${o.led.color}${o.led.on ? ' on' : ''}" role="img" aria-label="${esc(o.led.label)}" title="${esc(o.led.label)}"></span>` : '') +
+    (o.led ? `<span class="led ${o.led.color}${o.led.on ? ' on' : ''}" role="img" aria-label="${esc(o.led.label)}" title="${esc(o.led.label)}"></span>`
+      : '<span class="led ph" aria-hidden="true"></span>') +
     '</button>';
 }
 
