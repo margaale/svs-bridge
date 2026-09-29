@@ -249,8 +249,7 @@ that port in the utility. Use the web UI, not the utility, for SVS firmware upda
   from a file…** with an `svs_bridge.bin`. The image is checked (ESP32-S3, project
   `svs_bridge`, checksum) before the bridge switches to it. A new version is kept only once it
   reconnects to WiFi (within 5 minutes). If it crashes or never connects, the bridge goes back
-  to the previous one, so a bad update can't leave a remote bridge unreachable. A bridge running
-  a release only sees releases; one running an alpha also sees alphas.
+  to the previous one, so a bad update can't leave a remote bridge unreachable.
 - **WiFi**: the network, its signal, and a way to change it.
 - **HTTPS certificate**: its fingerprint, and a download for scripts that want to pin it.
 - **Restart**, **Factory reset** and **Log out**.
@@ -368,11 +367,11 @@ Work goes to `develop` (the default branch) through pull requests, and `master` 
 released. Versions come from GitVersion (`GitVersion.yml`) and
 [CI](.github/workflows/build.yml):
 
-- **`master`**: every push is a release, `vX.Y.Z`. The patch number grows with each one; a
-  line `+semver: minor` in a commit message bumps the minor.
-- **`develop`**: every push is a pre-release, `vX.Y.Z-alpha.N`, where N is CI's run number,
-  so a newer build always has a newer version.
-- **Pull requests**: built as `X.Y.Z-pr.N`, not published. The images are attached to the run.
+- **`master`**: every push is a release, tagged `vX.Y.Z`; the only branch that is tagged. The
+  patch number grows with each one; a line `+semver: minor` in a commit message bumps the minor.
+- **`develop`**: every push is built as `X.Y.Z-alpha.N`, where N is CI's run number, so a
+  newer build always has a newer version. Not published: the images are attached to the run.
+- **Pull requests**: built as `X.Y.Z-pr.N`, the same.
 
 Release images are named `svs-bridge-<version>-esp32s3_n16r8-<file>`: `svs_bridge.bin` is the
 OTA image, `svs_bridge-factory.bin` flashes a new board at `0x0`, and the bootloader, partition
