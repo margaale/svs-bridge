@@ -862,8 +862,7 @@ const REMOTES = {"RetroTINK 4K Pro":[["Power",73,26],["INPUT",73,17],["OUT",73,3
 // (audio first), the module's name printed along its side
 function face(kind, role, o) {
   o = o || {};
-  const rca = (y, c) => `<rect x="70" y="${y + 2}" width="5" height="10" rx="1" fill="#9A9EA5"/>` +
-    `<circle cx="62" cy="${y}" r="11" fill="${c}"/><circle cx="62" cy="${y}" r="7.3" fill="#C9CCD1"/><circle cx="62" cy="${y}" r="3.1" fill="#0B0C0E"/>`;
+  const rca = (y, c) => `<circle cx="62" cy="${y}" r="11" fill="${c}"/><circle cx="62" cy="${y}" r="7.3" fill="#C9CCD1"/><circle cx="62" cy="${y}" r="3.1" fill="#0B0C0E"/>`;
   const lab = (y, t) => `<text x="44" y="${y + 2.5}" font-size="7" fill="#7A7E85" text-anchor="end">${t}</text>`;
   const W = '#E6E6E2', R = '#C9423A';
   const col = (list) => list.map(([y, c, t]) => rca(y, c) + lab(y, t)).join('');
