@@ -449,6 +449,21 @@ class Handler(BaseHTTPRequestHandler):
             new = json.loads(body or b"{}")
             layout.update(inputs=new.get("inputs", []), outputs=new.get("outputs", []))
             self.send_json(layout)
+        elif path == "/device/svs/send":
+            command = json.loads(body or b"{}").get("command", "").strip()
+            if not command:
+                self.send_json({"error": "Enter a command (up to 128 characters)"}, 400)
+                return
+            log(">", command)
+            n, total = state["svs"]["current_input"], state["svs"]["total_inputs"]
+            new = {"SVS_Input_Up": n % total + 1, "SVS_Input_Seek_Up": n % total + 1,
+                   "SVS_Input_Down": (n - 2) % total + 1, "SVS_Input_Seek_Down": (n - 2) % total + 1}.get(command)
+            if command.startswith("SVS_Change_Input_") and command[17:].isdigit():
+                new = int(command[17:])
+            if new is not None:
+                state["svs"]["current_input"] = new
+                log("<", f"SVS NEW INPUT {new}")
+            self.send_json({"ok": True})
         elif path == "/device/svs/restart":
             log("*", "SVS restarted")
             for line in (state["svs"]["firmware"], "SVS CURRENT INPUT 1", "SVS TOTAL INPUTS 8"):

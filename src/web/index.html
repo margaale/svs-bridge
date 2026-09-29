@@ -128,6 +128,9 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 .mod .mk{font:600 11px var(--mono);color:#C9CCD1;display:flex;align-items:center;gap:4px}
 .mod .mn{font-size:12px;color:var(--soft);max-width:76px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mod .mn.none{color:#6B6F76}
+.mod .led{width:9px;height:9px;border-radius:50%;background:#33363B;box-shadow:inset 0 0 0 1px #0007;flex:none}
+.mod .led.g.on{background:var(--ok);box-shadow:0 0 8px 1px var(--ok)}
+.mod .led.b.on{background:var(--blue);box-shadow:0 0 8px 1px var(--blue)}
 .mod.pend .mk,.mod.pend .mn{font-style:italic}  /* changes not saved to the SVS yet */
 .mod.sel{background:#3A1E2A;border-color:var(--accent)}
 .mod.dragging{position:relative;z-index:5;box-shadow:0 12px 28px #000a;cursor:grabbing;transition:none}
@@ -220,7 +223,14 @@ button.mod{width:84px;height:auto;flex:none;flex-direction:column;gap:6px;paddin
 <div class="panel">
 <div class="row"><h2 class="grow">Active input</h2><span class="dot" id="v-dot"></span><span class="small" id="v-state">–</span></div>
 <div class="svs-now"><span id="v-input">–</span><span id="v-sub" class="small"></span></div>
-<div class="kv"><span>Firmware</span><span id="svs-fw">–</span><span>Inputs</span><span id="svs-inputs">–</span></div>
+<div class="stack" id="nav" style="gap:8px">
+<div class="row"><button type="button" style="flex:1 1 0" id="nav-prev">&#9664; Previous</button><button type="button" style="flex:1 1 0" id="nav-next">Next &#9654;</button></div>
+<div class="row"><button type="button" style="flex:1 1 0" id="nav-seekprev" title="Previous input that has a signal">&#9664; Seek</button><button type="button" style="flex:1 1 0" id="nav-seeknext" title="Next input that has a signal">Seek &#9654;</button></div>
+<div class="row"><select id="nav-input" class="grow" style="width:auto" aria-label="Input to switch to"></select><button type="button" id="nav-go">Go</button></div>
+<div class="row"><span class="small grow">Attract mode</span><button type="button" id="nav-attr-on">On</button><button type="button" id="nav-attr-off">Off</button></div>
+<div class="msg" id="nav-msg"></div>
+<div class="small" id="nav-hint"></div>
+</div>
 <div class="small">The bridge reports the active input to Home Assistant, and to a Cruller on the same network.</div>
 </div>
 
@@ -705,6 +715,58 @@ async function refreshClients() {
 
 // --- SVS --------------------------------------------------------------------
 
+// Input controls (the same commands as the official utility's buttons). The firmware that has each:
+// Previous, Next and Go to 1.12; Seek and Attract mode 1.14. Whether attract mode is on cannot be read.
+function fwNumber(s) {
+  const m = /(\d+)\.(\d+)/.exec(s.firmware || '');
+  return m ? +m[1] * 100 + +m[2] : null;  // null: not reported yet
+}
+
+let navInputs = -1;  // inputs the picker was built for
+function renderNav(s) {
+  const fw = fwNumber(s);
+  const idle = s.update.task === 'idle';
+  const can = (min) => s.connected && idle && (fw === null || fw >= min);
+  for (const id of ['nav-prev', 'nav-next', 'nav-input', 'nav-go']) $(id).disabled = !can(112);
+  for (const id of ['nav-seekprev', 'nav-seeknext', 'nav-attr-on', 'nav-attr-off']) $(id).disabled = !can(114);
+  text('nav-hint', s.connected && fw !== null && fw < 114
+    ? 'Firmware ' + s.firmware.replace(/^SVS_FW_/, '') + ' has no Seek or Attract mode (1.14).' : '');
+
+  const n = s.total_inputs > 0 ? s.total_inputs : 0;
+  const pick = $('nav-input');
+  if (navInputs !== n) {
+    navInputs = n;
+    const keep = pick.value;
+    pick.innerHTML = '';
+    for (let i = 1; i <= n; i++) {
+      const o = document.createElement('option');
+      o.value = String(i);
+      const name = layout && layout.inputs && layout.inputs[i - 1] && layout.inputs[i - 1].name;
+      o.textContent = 'Input ' + i + (name ? ' · ' + name : '');
+      pick.appendChild(o);
+    }
+    pick.insertAdjacentHTML('beforeend', '<option value="0">No input</option>');
+    pick.value = keep && [...pick.options].some((o) => o.value === keep) ? keep : n ? '1' : '0';
+  }
+}
+
+async function navSend(command) {
+  try {
+    await post('/device/svs/send', {command});
+    setMsg($('nav-msg'), '');
+    pollLog();
+  } catch (err) {
+    setMsg($('nav-msg'), err.message, 'bad');
+  }
+}
+
+for (const [id, command] of [['nav-prev', 'SVS_Input_Down'], ['nav-next', 'SVS_Input_Up'],
+    ['nav-seekprev', 'SVS_Input_Seek_Down'], ['nav-seeknext', 'SVS_Input_Seek_Up'],
+    ['nav-attr-on', 'SVS_Attract_ON'], ['nav-attr-off', 'SVS_Attract_OFF']]) {
+  $(id).onclick = () => navSend(command);
+}
+$('nav-go').onclick = () => navSend('SVS_Change_Input_' + $('nav-input').value);
+
 function renderSvs(s) {
   svs = s;
   // Only ever what a connected SVS has reported (there is no command to ask for
@@ -718,9 +780,6 @@ function renderSvs(s) {
   text('v-input', input);
   text('v-sub', !s.connected ? 'plug the SVS into the bridge' : !known ? 'reported when the input changes'
     : s.current_input === 0 ? 'no input selected' : s.total_inputs ? 'of ' + s.total_inputs + ' inputs' : '');
-  const unknown = 'unknown until it restarts';
-  text('svs-fw', !s.connected ? '–' : s.firmware ? s.firmware.replace(/^SVS_FW_/, '') : unknown);
-  text('svs-inputs', !s.connected ? '–' : s.total_inputs != null ? s.total_inputs : unknown);
 
   const name = s.current_input > 0 && s.current_input_name;
   if (known && name) text('v-sub', name);
@@ -733,6 +792,7 @@ function renderSvs(s) {
     : 'Commands, settings and firmware updates reach the SVS only with the RetroTINK\'s HD-15 unplugged: '
       + 'the SVS shares that line. Restarting it works either way.');
   $('svs-restart-btn').disabled = !s.connected || s.update.task !== 'idle';
+  renderNav(s);
   $('svs-send-form').hidden = !s.connected;
   $('svs-fw-section').hidden = !s.connected;
 
@@ -1073,6 +1133,7 @@ function modTile(o) {
     `${o.sel ? ' aria-pressed="true"' : ''}>` +
     o.svg + `<span class="mk" style="color:${o.color || ''}">${esc(o.kind)}${o.dot ? '<span class="vdot" title="Recognised by the SVS"></span>' : ''}</span>` +
     `<span class="mn${o.name ? '' : ' none'}">${esc(o.name || o.empty || '')}</span>` +
+    (o.led ? `<span class="led ${o.led.color}${o.led.on ? ' on' : ''}" role="img" aria-label="${esc(o.led.label)}" title="${esc(o.led.label)}"></span>` : '') +
     '</button>';
 }
 
@@ -1083,8 +1144,12 @@ function renderStack() {
     if (!chainVisible(o)) return '';
     if (isTx(o)) {
       const t = txOf(o);
+      // Converting now: the input on screen has it on in the SVS (as last read)
+      const cur = svs && svs.current_input > 0 ? snap && snap.settings && snap.settings[svs.current_input - 1] : null;
+      const on = !!(cur && cur[t.key]);
       return modTile({t: 'tx', i, group: 'out', sel: sel.t === 'tx' && sel.i === i, svg: face('transcoder', 'tx', {tag: 'TX', sub: t.sub}),
-                      kind: 'TX', color: 'var(--ok)', name: t.name, aria: `${t.name} transcoder, converts the outputs past it`});
+                      kind: 'TX', color: 'var(--ok)', name: t.name, aria: `${t.name} transcoder, converts the outputs past it${on ? ', converting now' : ''}`,
+                      led: {color: 'b', on, label: on ? 'Converting the input on screen' : cur ? 'Not converting the input on screen' : 'Not known: read the SVS settings'}});
     }
     const k = OUT_KINDS[o.kind] || OUT_KINDS.component, num = outNumber(i);
     return modTile({t: 'out', i, group: 'out', sel: sel.t === 'out' && sel.i === i, svg: face(o.kind, 'out', {tag: 'OUT ' + num}),
@@ -1099,6 +1164,7 @@ function renderStack() {
     return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
                     svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
                     kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'Nothing picked', pending: changes(i) > 0,
+                    led: {color: 'g', on: !!lit, label: lit ? 'On screen now' : 'Not on screen'},
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
   }).join('');
   const fw = svs && svs.firmware ? svs.firmware.replace(/^SVS_FW_/, 'FW ') : '';
