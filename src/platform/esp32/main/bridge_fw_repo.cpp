@@ -1,6 +1,8 @@
 #include "bridge_fw_repo.h"
 
 #include <stdio.h>
+#include <string.h>
+#include <algorithm>
 #include <memory>
 
 #include "esp_crt_bundle.h"
@@ -19,7 +21,6 @@ static const char *LIST_URL =
 // The OTA image: "svs-bridge-<version>-<board>-svs_bridge.bin" (CI names it so), or plain
 // "svs_bridge.bin" as on earlier releases.
 static const char *ASSET_NAME = "svs_bridge.bin";
-static const size_t MAX_LIST_BYTES = 256 * 1024;  // release notes can be large
 
 // GitHub allows 60 unauthenticated calls per hour, so a listing is reused briefly.
 static const int64_t CACHE_US = 60LL * 1000 * 1000;
@@ -33,7 +34,58 @@ static bool is_image(const std::string &name)
            (name.size() > suffix.size() && name.compare(name.size() - suffix.size(), suffix.size(), suffix) == 0);
 }
 
-static esp_err_t http_get(const char *url, std::string &body, std::string *error)
+// Feeds an HTTP answer to ArduinoJson as it arrives. The release list runs to
+// hundreds of KB (every asset carries its uploader's whole profile) and grows
+// with each release, but the filter keeps only a few fields, so the answer is
+// never held in memory.
+class HttpReader {
+public:
+    explicit HttpReader(esp_http_client_handle_t client) : client_(client), buf_(new char[CHUNK]) {}
+
+    int read()
+    {
+        return fill() ? (unsigned char)buf_[pos_++] : -1;
+    }
+
+    size_t readBytes(char *out, size_t length)
+    {
+        size_t done = 0;
+        while (done < length && fill()) {
+            size_t take = std::min(length - done, (size_t)(len_ - pos_));
+            memcpy(out + done, buf_.get() + pos_, take);
+            pos_ += take;
+            done += take;
+        }
+        return done;
+    }
+
+    bool failed() const { return failed_; }
+
+private:
+    static const int CHUNK = 2048;
+
+    bool fill()
+    {
+        if (pos_ < len_) return true;
+        if (failed_) return false;
+        len_ = esp_http_client_read(client_, buf_.get(), CHUNK);
+        pos_ = 0;
+        if (len_ < 0) {
+            failed_ = true;
+            len_ = 0;
+        }
+        return len_ > 0;
+    }
+
+    esp_http_client_handle_t client_;
+    std::unique_ptr<char[]> buf_;
+    int len_ = 0, pos_ = 0;
+    bool failed_ = false;
+};
+
+// Sends a GET and checks the status. On success the body is ready to read,
+// and the caller closes the client with close_get().
+static esp_err_t open_get(const char *url, esp_http_client_handle_t &out, std::string *error)
 {
     esp_http_client_config_t config = {};
     config.url = url;
@@ -69,20 +121,14 @@ static esp_err_t http_get(const char *url, std::string &body, std::string *error
         }
         return ESP_FAIL;
     }
+    out = client;
+    return ESP_OK;
+}
 
-    body.clear();
-    const int chunk = 2048;
-    std::unique_ptr<char[]> buf(new char[chunk]);
-    while (true) {
-        int n = esp_http_client_read(client, buf.get(), chunk);
-        if (n < 0) { err = ESP_FAIL; *error = "Download interrupted"; break; }
-        if (n == 0) break;
-        if (body.size() + n > MAX_LIST_BYTES) { err = ESP_ERR_INVALID_SIZE; *error = "Answer larger than expected"; break; }
-        body.append(buf.get(), n);
-    }
+static void close_get(esp_http_client_handle_t client)
+{
     esp_http_client_close(client);
     esp_http_client_cleanup(client);
-    return err;
 }
 
 esp_err_t list(std::vector<Release> &out, std::string *error)
@@ -92,8 +138,8 @@ esp_err_t list(std::vector<Release> &out, std::string *error)
         return ESP_OK;
     }
 
-    std::string body;
-    esp_err_t err = http_get(LIST_URL, body, error);
+    esp_http_client_handle_t client;
+    esp_err_t err = open_get(LIST_URL, client, error);
     if (err != ESP_OK) {
         return err;
     }
@@ -110,8 +156,15 @@ esp_err_t list(std::vector<Release> &out, std::string *error)
     fa["browser_download_url"] = true;
 
     JsonDocument doc;
-    if (deserializeJson(doc, body, DeserializationOption::Filter(filter)) != DeserializationError::Ok ||
-        !doc.is<JsonArray>()) {
+    HttpReader reader(client);
+    DeserializationError parsed = deserializeJson(doc, reader, DeserializationOption::Filter(filter));
+    close_get(client);
+    if (reader.failed()) {
+        *error = "Download interrupted";
+        return ESP_FAIL;
+    }
+    if (parsed != DeserializationError::Ok || !doc.is<JsonArray>()) {
+        ESP_LOGE(TAG, "Release list: %s", parsed.c_str());
         *error = "Unexpected answer from GitHub";
         return ESP_FAIL;
     }
