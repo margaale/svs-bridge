@@ -116,7 +116,7 @@ jobs:
           if-no-files-found: error
 
   # Every push to master: tag vX.Y.Z and a GitHub release with the images. Every push to develop: a
-  # pre-release vX.Y.Z-alpha.N, to try on a board (the Bridge tab suggests alphas only to a board
+  # pre-release vX.Y.Z-alpha.N, to try on a board (the Bridge tab lists alphas only to a board
   # already running one).
   publish:
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
