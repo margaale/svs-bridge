@@ -988,7 +988,7 @@ function face(kind, role, o) {
   const names = {scart: 'SCART', component: 'COMPONENT', vga: 'VGA', svideo: 'COMPOSITE', dterm: 'D-TERMINAL', bnc: 'BNC'};
   const printed = names[kind] ? names[kind] + (role === 'out' ? ' OUTPUT' : ' INPUT') : '';
   return `<svg viewBox="0 0 112 200" aria-hidden="true" font-family="IBM Plex Mono,monospace">` +
-    `<rect x="1" y="1" width="110" height="198" rx="5" fill="#161719" stroke="${o.lit ? '#E8618C' : '#2E3033'}" stroke-width="${o.lit ? 3 : 1.5}"/>` +
+    '<rect x="1" y="1" width="110" height="198" rx="5" fill="#161719" stroke="#2E3033" stroke-width="1.5"/>' +
     (printed ? `<text x="14" y="100" transform="rotate(-90 14 100)" font-size="7.5" font-weight="500" letter-spacing="1.2" fill="#6F737A" text-anchor="middle" dominant-baseline="middle">${printed}</text>` : '') +
     body + (o.tag ? `<text x="62" y="190" font-size="9" font-weight="500" fill="#8A8E95" text-anchor="middle">${o.tag}</text>` : '') + '</svg>';
 }
@@ -1180,7 +1180,7 @@ function renderStack() {
   const ins = Array.from({length: n}, (_, i) => {
     const k = inputKind(i), name = layoutInput(i).name, lit = svs && svs.current_input === i + 1;
     return modTile({t: 'in', i, group: 'in', sel: sel.t === 'in' && sel.i === i,
-                    svg: face(k.kind, 'in', {lit, tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
+                    svg: face(k.kind, 'in', {tag: k.v3 ? 'V3 · IN ' + (i + 1) : 'IN ' + (i + 1)}),
                     kind: k.short, color: k.unset ? 'var(--warn)' : '', dot: k.v3, name, empty: 'Nothing picked', pending: changes(i) > 0,
                     led: {color: 'g', on: !!lit, label: lit ? 'On screen now' : 'Not on screen'},
                     aria: `Input ${i + 1}, ${k.name}${name ? ', ' + name : ''}${lit ? ', on screen' : ''}`});
@@ -1259,7 +1259,7 @@ function renderInspector() {
       : k.unset ? `A ${con.name} sends ${listSignals(con.signals)}.`
       : fits(con) ? `Sends ${listSignals(con.signals.filter((x) => takes.includes(x)))} to this ${k.name} module.`
       : `Stock, a ${con.name} sends ${listSignals(con.signals)}, and this ${k.name} module takes ${listSignals(takes)}. Fine if it is modded or goes through an adapter.`;
-    html = `<div class="insp-face">${face(k.kind, 'in', {lit, tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
+    html = `<div class="insp-face">${face(k.kind, 'in', {tag: k.v3 ? 'V3' : 'IN ' + (i + 1)})}<span class="small">The low-pass filter switch is on the module itself.</span></div>` +
       `<div class="insp-body"><div class="row"><h3 class="grow">Input ${i + 1}</h3>${lit ? '<span class="chip" style="border-color:var(--accent);color:#F28BAA"><span class="dot" style="background:var(--accent)"></span>On screen now</span>' : ''}</div>` +
       `<div class="stack"><label class="lbl" for="in-dev">What is plugged in</label>${devicePicker('in-dev', CONSOLES, li.device, groups)}` +
       `<span class="small${con && !k.unset && !fits(con) ? ' warn' : ''}">${esc(fitNote)}</span></div>` +
