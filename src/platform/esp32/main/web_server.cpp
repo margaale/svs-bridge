@@ -22,6 +22,7 @@
 #include "esp_timer.h"
 #include "ArduinoJson.h"
 
+#include "api_events.h"
 #include "auth.h"
 #include "bridge_fw_repo.h"
 #include "cruller.h"
@@ -328,7 +329,12 @@ static esp_err_t clients_get(httpd_req_t *req)
 // ---------------------------------------------------------------------------
 // Public API (/api/v1) for external integrations, e.g. Home Assistant.
 // Bearer-authenticated with the API token; independent of the admin session.
+// GET /api/v1/events (below, with /ws) pushes the state as it changes.
 // ---------------------------------------------------------------------------
+
+// The API's version: "api_version" in /api/v1/info and in /api/v1/events' "hello", "version" in the
+// _svsbridge._tcp TXT. New routes, keys and event types keep it.
+static const int API_VERSION = 1;
 
 // Identity and capabilities, read once by the integration's config flow.
 static esp_err_t api_info_get(httpd_req_t *req)
@@ -341,21 +347,26 @@ static esp_err_t api_info_get(httpd_req_t *req)
     doc["manufacturer"] = "SVS Bridge";
     doc["sw_version"] = app->version;
     doc["hostname"] = CONFIG_SVS_HOSTNAME ".local";
-    doc["api_version"] = 1;
+    doc["api_version"] = API_VERSION;
     return send_json(req, doc);
 }
 
-// Live state, polled by the integration.
-static esp_err_t api_state_get(httpd_req_t *req)
+// Live state: polled by the integration (GET /api/v1/state), or pushed (/api/v1/events).
+static void add_api_state(JsonObject state)
 {
-    JsonDocument doc;
-    add_svs_info(doc["svs"].to<JsonObject>());
-    JsonObject bridge = doc["bridge"].to<JsonObject>();
+    add_svs_info(state["svs"].to<JsonObject>());
+    JsonObject bridge = state["bridge"].to<JsonObject>();
     // The running firmware version, so the integration always shows the current
     // one (not just what it read at setup) and can detect a newer release.
     bridge["sw_version"] = esp_app_get_description()->version;
     bridge["rssi"] = wifi_manager::sta_rssi();
     bridge["uptime_s"] = esp_timer_get_time() / 1000000;
+}
+
+static esp_err_t api_state_get(httpd_req_t *req)
+{
+    JsonDocument doc;
+    add_api_state(doc.to<JsonObject>());
     return send_json(req, doc);
 }
 
@@ -1242,21 +1253,28 @@ static bool authenticated(httpd_req_t *req)
 }
 
 // True if the request carries a valid "Authorization: Bearer <api token>".
-static bool api_authorized(httpd_req_t *req)
+// The token of an "Authorization: Bearer <token>" header ("" if none)
+static std::string bearer_token(httpd_req_t *req)
 {
     size_t len = httpd_req_get_hdr_value_len(req, "Authorization");
     if (len == 0 || len > 128) {
-        return false;
+        return "";
     }
     std::string header(len, '\0');
     if (httpd_req_get_hdr_value_str(req, "Authorization", &header[0], len + 1) != ESP_OK) {
-        return false;
+        return "";
     }
     const std::string prefix = "Bearer ";
     if (header.rfind(prefix, 0) != 0) {
-        return false;
+        return "";
     }
-    return auth::api_token_valid(header.substr(prefix.size()));
+    return header.substr(prefix.size());
+}
+
+static bool api_authorized(httpd_req_t *req)
+{
+    std::string token = bearer_token(req);
+    return !token.empty() && auth::api_token_valid(token);
 }
 
 // Sends doc along with a Set-Cookie header for the session (empty = clear it).
@@ -1369,17 +1387,31 @@ static esp_err_t logout_post(httpd_req_t *req)
 //           {"type": "pong"}
 //           {"type": "auth"}  the session ended (logout, expiry); the socket closes
 // The session cookie is checked before the handshake, then before each push.
+//
+// GET /api/v1/events is the same machinery for Home Assistant and scripts, with the API token
+// (Authorization: Bearer) instead of a session, and Cruller's /api/v1/events contract:
+//   bridge: {"type": "hello", "api_version": 1, "types": [...], "subscribed": [...]}  first
+//           {"type": "state", "state": {as GET /api/v1/state}}  if it asked for "state" (?types=,
+//             "state" by default): at once, when the "svs" part changes, and at least every minute
+//           {"type": "auth"}  the API token was regenerated; the socket closes
+// What the client sends is reserved (messages a later v1 announces in "hello"): ignored for now.
 // ---------------------------------------------------------------------------
 
 static const int HTTPS_MAX_SOCKETS = 7;  // each open page holds one for its WebSocket
 static const size_t MAX_WS_FRAME = 512;
 static const int WS_TICK_MS = 500;  // for what changes without a log line (flash progress)
+static const int EVENTS_MAX = 2;  // /api/v1/events sockets at once (a new one closes the oldest)
+static const int64_t EVENTS_EVERY_US = 60 * 1000000LL;  // an unchanged state again this often
 
 struct WsClient {
-    std::string token;       // the session it was opened with
-    bool ready = false;      // "hello" received
+    bool events = false;     // an /api/v1/events client, not a page
+    std::string token;       // a page's session; an events client's API token
+    bool ready = false;      // page: "hello" received; events client: its "hello" sent
     uint32_t log_after = 0;  // the newest log entry it has
-    std::string svs;         // the "svs" message it has
+    std::string svs;         // page: the "svs" message it has; events client: its last state's "svs"
+    uint32_t types = 0;      // events client: its api_events types
+    int64_t sent_us = 0;     // events client: when its last state went
+    int64_t opened_us = 0;   // events client: when it connected (the oldest makes room)
 };
 
 static std::atomic<int> s_ws_clients{0};
@@ -1432,7 +1464,48 @@ static esp_err_t ws_send_text(int fd, const std::string &text)
     return httpd_ws_send_frame_async(s_https_server, fd, &frame);
 }
 
-// In the server's task (httpd_queue_work): sends each page what it has not seen
+// An /api/v1/events client, in the server's task: its "hello" first, then (if it asked for "state")
+// the state as soon as its "svs" part changes (svs_key: that part now, built once per flush), and at
+// least every EVENTS_EVERY_US. Not rssi or uptime alone: they change all the time.
+static esp_err_t events_flush(int fd, WsClient *c, std::string &svs_key)
+{
+    if (!auth::api_token_valid(c->token)) {  // regenerated in the web UI
+        ws_send_text(fd, "{\"type\":\"auth\"}");
+        return ESP_FAIL;
+    }
+    if (!c->ready) {
+        c->ready = true;
+        const std::string hello = "{\"type\":\"hello\",\"api_version\":" + std::to_string(API_VERSION) +
+                                  ",\"types\":" + api_events::names_json(api_events::ALL) +
+                                  ",\"subscribed\":" + api_events::names_json(c->types) + "}";
+        esp_err_t err = ws_send_text(fd, hello);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    if (!(c->types & api_events::STATE)) {
+        return ESP_OK;
+    }
+    if (svs_key.empty()) {
+        JsonDocument doc;
+        add_svs_info(doc.to<JsonObject>());
+        serializeJson(doc, svs_key);
+    }
+    const int64_t now = esp_timer_get_time();
+    if (svs_key == c->svs && now - c->sent_us < EVENTS_EVERY_US) {
+        return ESP_OK;
+    }
+    c->svs = svs_key;
+    c->sent_us = now;
+    JsonDocument doc;
+    doc["type"] = "state";
+    add_api_state(doc["state"].to<JsonObject>());
+    std::string out;
+    serializeJson(doc, out);
+    return ws_send_text(fd, out);
+}
+
+// In the server's task (httpd_queue_work): sends each page and events client what it has not seen
 static void ws_flush(void *arg)
 {
     s_ws_flush_queued = false;
@@ -1441,7 +1514,8 @@ static void ws_flush(void *arg)
     if (httpd_get_client_list(s_https_server, &n, fds) != ESP_OK) {
         return;
     }
-    std::string svs;  // built once, for the pages that need it
+    std::string svs;      // built once, for the pages that need it
+    std::string svs_key;  // likewise, for the events clients
     bool more = false;
     for (size_t i = 0; i < n; i++) {
         const int fd = fds[i];
@@ -1449,6 +1523,14 @@ static void ws_flush(void *arg)
             continue;
         }
         auto *c = static_cast<WsClient *>(httpd_sess_get_ctx(s_https_server, fd));
+        if (c != nullptr && c->events) {
+            if (events_flush(fd, c, svs_key) != ESP_OK) {
+                httpd_sess_trigger_close(s_https_server, fd);
+            } else {
+                httpd_sess_update_lru_counter(s_https_server, fd);
+            }
+            continue;
+        }
         if (c == nullptr || !c->ready) {
             continue;
         }
@@ -1594,6 +1676,87 @@ static esp_err_t ws_pre_handshake(httpd_req_t *req)
     return ESP_OK;
 }
 
+// Room for one more /api/v1/events client: at EVENTS_MAX, the oldest goes (usually a Home Assistant
+// that reconnected before its old connection was noticed gone)
+static void events_make_room()
+{
+    int fds[HTTPS_MAX_SOCKETS];
+    size_t n = HTTPS_MAX_SOCKETS;
+    if (httpd_get_client_list(s_https_server, &n, fds) != ESP_OK) {
+        return;
+    }
+    int count = 0;
+    int oldest = -1;
+    int64_t oldest_us = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (httpd_ws_get_fd_info(s_https_server, fds[i]) != HTTPD_WS_CLIENT_WEBSOCKET) {
+            continue;
+        }
+        auto *c = static_cast<WsClient *>(httpd_sess_get_ctx(s_https_server, fds[i]));
+        if (c == nullptr || !c->events) {
+            continue;
+        }
+        count++;
+        if (oldest < 0 || c->opened_us < oldest_us) {
+            oldest = fds[i];
+            oldest_us = c->opened_us;
+        }
+    }
+    if (count >= EVENTS_MAX && oldest >= 0) {
+        ESP_LOGI(TAG, "events: %d sockets open, closing the oldest", count);
+        httpd_sess_trigger_close(s_https_server, oldest);
+    }
+}
+
+// Before the /api/v1/events handshake: the API token, and the event types asked for (?types=)
+static esp_err_t events_pre_handshake(httpd_req_t *req)
+{
+    std::string token = bearer_token(req);
+    if (token.empty() || !auth::api_token_valid(token)) {
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Bearer");
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Invalid or missing API token");
+        return ESP_FAIL;
+    }
+    uint32_t types = api_events::STATE;
+    char query[160];
+    char list[128];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK &&
+        httpd_query_key_value(query, "types", list, sizeof(list)) == ESP_OK) {
+        types = api_events::parse(api_events::url_decode(list));
+    }
+    auto *c = new (std::nothrow) WsClient();
+    if (c == nullptr) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+        return ESP_FAIL;
+    }
+    events_make_room();
+    c->events = true;
+    c->token = token;
+    c->types = types;
+    c->opened_us = esp_timer_get_time();
+    s_ws_clients++;
+    req->sess_ctx = c;  // freed with the session
+    req->free_ctx = ws_client_free;
+    return ESP_OK;  // its "hello" goes with the next flush (within WS_TICK_MS)
+}
+
+// A message from an events client: reserved (none is defined yet), so read and ignored
+static esp_err_t events_handler(httpd_req_t *req)
+{
+    httpd_ws_frame_t frame = {};
+    if (httpd_ws_recv_frame(req, &frame, 0) != ESP_OK || frame.len > MAX_WS_FRAME) {  // its length
+        return ESP_FAIL;
+    }
+    if (frame.len > 0) {
+        std::string text(frame.len, '\0');
+        frame.payload = (uint8_t *)&text[0];
+        if (httpd_ws_recv_frame(req, &frame, frame.len) != ESP_OK) {
+            return ESP_FAIL;
+        }
+    }
+    return ESP_OK;
+}
+
 // ---------------------------------------------------------------------------
 // Dispatch and fallbacks
 // ---------------------------------------------------------------------------
@@ -1716,6 +1879,14 @@ static void register_ws(httpd_handle_t server)
     uri.is_websocket = true;  // the server answers pings and closes by itself
     uri.ws_pre_handshake_cb = ws_pre_handshake;
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &uri));
+
+    httpd_uri_t events = {};
+    events.uri = "/api/v1/events";
+    events.method = HTTP_GET;
+    events.handler = events_handler;
+    events.is_websocket = true;
+    events.ws_pre_handshake_cb = events_pre_handshake;
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &events));
 }
 
 static void start_https()
@@ -1734,7 +1905,7 @@ static void start_https()
     config.servercert_len = cert.size() + 1;
     config.prvtkey_pem = (const uint8_t *)key.c_str();
     config.prvtkey_len = key.size() + 1;
-    config.httpd.max_uri_handlers = sizeof(HTTPS_ROUTES) / sizeof(HTTPS_ROUTES[0]) + 1;  // + /ws
+    config.httpd.max_uri_handlers = sizeof(HTTPS_ROUTES) / sizeof(HTTPS_ROUTES[0]) + 2;  // + /ws, /api/v1/events
     // Handlers that fetch SVS releases open their own TLS connection to GitHub
     config.httpd.stack_size = 16384;
     config.httpd.max_open_sockets = HTTPS_MAX_SOCKETS;
