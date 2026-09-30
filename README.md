@@ -207,12 +207,13 @@ HACS. Home Assistant discovers the bridge on your network by itself (mDNS `_svsb
 When you add it, paste the token from the bridge's **Home Assistant** tab. Automations can then
 react to input changes: turn on the TV, switch a scaler profile, and so on.
 
-The API is two read-only endpoints, both requiring an `Authorization: Bearer <token>` header:
+The API is three read-only endpoints, all requiring an `Authorization: Bearer <token>` header:
 
 | Endpoint | Returns |
 |---|---|
 | `GET /api/v1/info` | Device identity: id, name, model, firmware version |
 | `GET /api/v1/state` | SVS state and bridge diagnostics |
+| `GET /api/v1/events` | The same state as it changes, over a WebSocket (below) |
 
 ```bash
 curl -k -H "Authorization: Bearer $TOKEN" https://svs-bridge.local/api/v1/state
@@ -228,6 +229,31 @@ curl -k -H "Authorization: Bearer $TOKEN" https://svs-bridge.local/api/v1/state
   "bridge": { "sw_version": "0.2.0", "rssi": -52, "uptime_s": 3600 }
 }
 ```
+
+**Events.** `GET /api/v1/events` is a WebSocket (`wss://`, with the same token) that pushes the
+state instead of waiting to be polled, the same contract as
+[Cruller's](https://github.com/margaale/Cruller/blob/develop/docs/API.md):
+
+```bash
+websocat -k -H "Authorization: Bearer $TOKEN" 'wss://svs-bridge.local/api/v1/events?types=state'
+```
+
+```json
+{"type": "hello", "api_version": 1, "types": ["state"], "subscribed": ["state"]}
+{"type": "state", "state": {"svs": {...}, "bridge": {...}}}
+```
+
+- Every message is a JSON object with a `type`. First `hello`: the API's version, `types` (every
+  type the bridge can send) and `subscribed` (the ones this socket gets, picked with `?types=`,
+  `state` by default; names the bridge doesn't have are left out).
+- `state` is the `/api/v1/state` object: at once, as soon as its `svs` part changes (an input
+  change reaches it as the SVS announces it), and at least every 60 s (`rssi`, `uptime_s`).
+- `{"type": "auth"}` and a close: the token was regenerated. What the client sends is reserved for
+  messages a later version announces in `hello`, and ignored today.
+- At most 2 events sockets at once: a new one closes the oldest (a client that reconnected before
+  its old connection was noticed gone). A bridge from before events answers `404`: poll
+  `/api/v1/state` there.
+- New event types, and new keys in any message, keep the API at version 1.
 
 ### The official SVS Management Utility over the network
 
