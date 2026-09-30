@@ -11,7 +11,7 @@ mkdir -p build-tests
 # The RFC 2217 parser is C: built as C, linked into its C++ test.
 "${CC:-gcc}" -std=c11 -Wall -Wextra -Werror -O1 -g -I src/core -c src/core/rfc2217_proto.c -o build-tests/rfc2217_proto.o
 
-tests=(test_svs_vectors test_svs_hex test_svs_protocol test_svs_config)
+tests=(test_svs_vectors test_svs_hex test_svs_protocol test_svs_config test_api_events)
 for t in "${tests[@]}"; do
     "$CXX" "${CXXFLAGS[@]}" "tests/$t.cpp" -o "build-tests/$t"
 done

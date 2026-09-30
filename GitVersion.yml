@@ -1,7 +1,8 @@
 # The bridge's version (.github/workflows/build.yml), same scheme as Cruller:
 #   master:        every push is a release, vX.Y.Z; the patch grows with each one.
-#   develop:       every push is a pre-release, vX.Y.Z-alpha.N, to try on a board.
-#   pull requests: X.Y.Z-pr.N, built but not published (the images are on the run).
+#   develop:       X.Y.Z-alpha.N, built but not published (the images are on the run).
+#   pull requests: X.Y.Z-pr.N, the same.
+# Only master's releases are tagged.
 # N is CI's run number (.github/workflows/build.yml), not a commit count: pull requests are
 # squash-merged, so only the run number keeps growing across branches.
 # A line "+semver: minor" or "+semver: major" in a commit message bumps more; only at the start of a

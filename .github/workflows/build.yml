@@ -1,6 +1,6 @@
 # Builds the bridge and runs the host tests; the images are kept as artifacts, one file each (not
-# zipped). GitVersion (GitVersion.yml) gives the version. A push to master is a release (vX.Y.Z), a
-# push to develop a pre-release (vX.Y.Z-alpha.N), both with the images; pull requests only build.
+# zipped). GitVersion (GitVersion.yml) gives the version. A push to master is a release (vX.Y.Z,
+# tagged, with the images); develop (X.Y.Z-alpha.N) and pull requests only build: tags are master's.
 # Same scheme as Cruller (margaale/Cruller .github/workflows/build.yml).
 name: build
 
@@ -115,11 +115,10 @@ jobs:
           archive: false
           if-no-files-found: error
 
-  # Every push to master: tag vX.Y.Z and a GitHub release with the images. Every push to develop: a
-  # pre-release vX.Y.Z-alpha.N, to try on a board (the Bridge tab suggests alphas only to a board
-  # already running one).
+  # Every push to master: tag vX.Y.Z and a GitHub release with the images. Only master is tagged:
+  # develop's builds keep their images on the run, as pull requests do.
   publish:
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [version, tests, esp32]
     runs-on: ubuntu-24.04
     permissions:
@@ -141,6 +140,5 @@ jobs:
           target_commitish: ${{ github.sha }}
           name: SVS Bridge ${{ needs.version.outputs.version }}
           generate_release_notes: true
-          prerelease: ${{ github.ref == 'refs/heads/develop' }}
           files: release/*
           fail_on_unmatched_files: true
